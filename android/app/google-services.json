@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "618585657398",
+    "project_id": "carbon-stores",
+    "storage_bucket": "carbon-stores.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:618585657398:android:2a0479c9b6274583bc4897",
+        "android_client_info": {
+          "package_name": "com.example.carbonstores"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDc4DVuAbeoswh2fsgmHrXLbKtcv9bws3s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
