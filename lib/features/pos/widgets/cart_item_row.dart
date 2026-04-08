@@ -1,7 +1,10 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/theme/app_colors.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../../core/theme/pos_colors.dart';
 import '../../../core/utils/currency_formatter.dart';
+import '../../../core/services/local_storage_service.dart';
 import '../../../data/models/cart_item_model.dart';
 import '../../../providers/cart_providers.dart';
 
@@ -12,33 +15,76 @@ class CartItemRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final pos = context.pos;
+    final subtotal = item.total;
+
     return Dismissible(
       key: ValueKey(item.productId),
       direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 16),
+        decoration: BoxDecoration(
+          color: pos.error.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(Icons.delete_outline_rounded, color: pos.error, size: 20),
+      ),
       onDismissed: (_) {
         ref.read(cartProvider.notifier).removeItem(item.productId);
       },
-      background: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        color: AppColors.errorContainer,
-        child: const Icon(Icons.delete_rounded, color: AppColors.error),
-      ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.symmetric(vertical: 12),
         child: Row(
           children: [
-            // Item Info
+            // Dynamic image placeholder
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF4F5F7),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: item.imageId == null
+                  ? Icon(
+                      Icons.image_outlined,
+                      size: 20,
+                      color: cs.onSurfaceVariant.withValues(alpha: 0.3),
+                    )
+                  : FutureBuilder<Uint8List?>(
+                      future: LocalStorageService()
+                          .getProductImageBytes(item.imageId!),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData && snapshot.data != null) {
+                          return ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.memory(
+                              snapshot.data!,
+                              fit: BoxFit.cover,
+                            ),
+                          );
+                        }
+                        return Icon(
+                          Icons.image_outlined,
+                          size: 20,
+                          color: cs.onSurfaceVariant.withValues(alpha: 0.3),
+                        );
+                      },
+                    ),
+            ),
+            const SizedBox(width: 12),
+            // Product info
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     item.name,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.onSurface,
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -46,66 +92,34 @@ class CartItemRow extends ConsumerWidget {
                   const SizedBox(height: 2),
                   Text(
                     CurrencyFormatter.format(item.price),
-                    style: const TextStyle(
+                    style: GoogleFonts.inter(
                       fontSize: 12,
-                      color: AppColors.onSurfaceVariant,
+                      fontWeight: FontWeight.w500,
+                      color: cs.onSurfaceVariant,
                     ),
                   ),
                 ],
               ),
             ),
 
-            // Quantity Controls
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.surfaceContainer,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.border, width: 0.5),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _QtyButton(
-                    icon: Icons.remove,
-                    onTap: () {
-                      ref.read(cartProvider.notifier).decrementQuantity(item.productId);
-                    },
-                  ),
-                  Container(
-                    width: 32,
-                    alignment: Alignment.center,
-                    child: Text(
-                      '${item.quantity}',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.onSurface,
-                      ),
-                    ),
-                  ),
-                  _QtyButton(
-                    icon: Icons.add,
-                    onTap: () {
-                      ref.read(cartProvider.notifier).incrementQuantity(item.productId);
-                    },
-                  ),
-                ],
-              ),
-            ),
+            const SizedBox(width: 8),
+
+            // Quantity stepper
+            _QuantityStepper(item: item),
 
             const SizedBox(width: 12),
 
-            // Item Total
+            // Subtotal
             SizedBox(
-              width: 70,
+              width: 64,
               child: Text(
-                CurrencyFormatter.format(item.total),
-                textAlign: TextAlign.right,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.onBackground,
+                CurrencyFormatter.format(subtotal),
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: cs.onSurface,
                 ),
+                textAlign: TextAlign.right,
               ),
             ),
           ],
@@ -115,22 +129,114 @@ class CartItemRow extends ConsumerWidget {
   }
 }
 
-class _QtyButton extends StatelessWidget {
+class _QuantityStepper extends ConsumerWidget {
+  final CartItem item;
+
+  const _QuantityStepper({required this.item});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final pos = context.pos;
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: cs.onSurfaceVariant.withValues(alpha: 0.15)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _StepperButton(
+            icon: item.quantity == 1
+                ? Icons.delete_outline_rounded
+                : Icons.remove_rounded,
+            iconColor: item.quantity == 1 ? pos.error : cs.onSurfaceVariant,
+            onTap: () {
+              ref.read(cartProvider.notifier).decrementQuantity(item.productId);
+            },
+          ),
+          SizedBox(
+            width: 24,
+            child: Text(
+              '${item.quantity}',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: cs.onSurface,
+              ),
+            ),
+          ),
+          _StepperButton(
+            icon: Icons.add_rounded,
+            iconColor: cs.onSurfaceVariant,
+            onTap: () {
+              ref.read(cartProvider.notifier).incrementQuantity(item.productId);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepperButton extends StatefulWidget {
   final IconData icon;
+  final Color iconColor;
   final VoidCallback onTap;
 
-  const _QtyButton({required this.icon, required this.onTap});
+  const _StepperButton({
+    required this.icon,
+    required this.iconColor,
+    required this.onTap,
+  });
+
+  @override
+  State<_StepperButton> createState() => _StepperButtonState();
+}
+
+class _StepperButtonState extends State<_StepperButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 100),
+      vsync: this,
+    );
+    _scale = Tween<double>(begin: 1.0, end: 0.85).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(6),
-        child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: Icon(icon, size: 16, color: AppColors.onSurface),
+    return GestureDetector(
+      onTapDown: (_) => _controller.forward(),
+      onTapUp: (_) {
+        _controller.reverse();
+        widget.onTap();
+      },
+      onTapCancel: () => _controller.reverse(),
+      child: AnimatedBuilder(
+        animation: _scale,
+        builder: (_, child) => Transform.scale(scale: _scale.value, child: child),
+        child: SizedBox(
+          width: 32,
+          height: 32,
+          child: Center(
+            child: Icon(widget.icon, size: 16, color: widget.iconColor),
+          ),
         ),
       ),
     );

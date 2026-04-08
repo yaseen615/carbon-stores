@@ -62,7 +62,8 @@ class _SplashScreenState extends State<SplashScreen>
     _logoController.forward();
     await Future.delayed(const Duration(milliseconds: 400));
     _textController.forward();
-    await Future.delayed(const Duration(milliseconds: AppConstants.splashDurationMs));
+    await Future.delayed(
+        const Duration(milliseconds: AppConstants.splashDurationMs));
     if (mounted) {
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
@@ -86,7 +87,7 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.primary,
+      backgroundColor: AppColors.brandPrimary,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -106,7 +107,7 @@ class _SplashScreenState extends State<SplashScreen>
             ),
             const SizedBox(height: 32),
 
-            // Animated Text
+            // Animated Text — now uses Inter throughout
             SlideTransition(
               position: _textSlide,
               child: FadeTransition(
@@ -115,20 +116,20 @@ class _SplashScreenState extends State<SplashScreen>
                   children: [
                     Text(
                       'CarbonGurukulam',
-                      style: GoogleFonts.outfit(
+                      style: GoogleFonts.inter(
                         fontSize: 32,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.secondary,
-                        letterSpacing: 1.5,
+                        color: AppColors.brandSecondary,
+                        letterSpacing: -0.5,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       'STORE',
                       style: GoogleFonts.inter(
-                        fontSize: 16,
+                        fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.secondary.withValues(alpha: 0.7),
+                        color: AppColors.brandSecondary.withValues(alpha: 0.7),
                         letterSpacing: 6,
                       ),
                     ),

@@ -1,26 +1,317 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/theme/app_colors.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../core/theme/pos_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/widgets/search_field.dart';
+import '../../core/services/student_sync_service.dart';
+import '../../core/services/student_search_index.dart';
 import '../../data/models/student_model.dart';
 import '../../data/repositories/student_repository.dart';
 import '../../data/repositories/audit_repository.dart';
 import '../../core/constants/app_constants.dart';
 import '../../providers/student_providers.dart';
+import 'widgets/student_detail_dialog.dart';
 
-class StudentsScreen extends ConsumerWidget {
+class StudentsScreen extends ConsumerStatefulWidget {
   const StudentsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final studentsAsync = ref.watch(studentsStreamProvider);
-    final filtered = ref.watch(filteredStudentsProvider);
+  ConsumerState<StudentsScreen> createState() => _StudentsScreenState();
+}
+
+class _StudentsScreenState extends ConsumerState<StudentsScreen> {
+  bool _isSyncing = false;
+  final ScrollController _scrollController = ScrollController();
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    // Load and initialize the search index
+    final index = ref.read(studentSearchIndexProvider);
+    index.load();
+    // Infinite scroll — trigger loadMore at 80% scroll
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (_searchQuery.isNotEmpty) return; // don't paginate during search
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final current = _scrollController.position.pixels;
+    if (current >= maxScroll * 0.8) {
+      ref.read(paginatedStudentsProvider.notifier).loadMore();
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// Show confirmation dialog, then run sync with progress overlay
+  Future<void> _syncStudents() async {
+    if (_isSyncing) return;
+
+    // ─── Step 1: Confirmation Dialog ───
+    final confirmed = await _showConfirmationDialog();
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isSyncing = true);
+
+    // ─── Step 2: Show progress dialog ───
+    final progressNotifier = ValueNotifier<double>(0.0);
+    final statusNotifier = ValueNotifier<String>('Fetching students from server...');
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _SyncProgressDialog(
+        progress: progressNotifier,
+        status: statusNotifier,
+      ),
+    );
+
+    try {
+      final service = StudentSyncService(
+        graphqlEndpoint: AppConstants.graphqlEndpoint,
+      );
+
+      final result = await service.syncStudents(
+        onProgress: (processed, total) {
+          if (total == 0) {
+            // Still fetching from API
+            statusNotifier.value = 'Fetching students from server...';
+            progressNotifier.value = 0.0;
+          } else {
+            final pct = processed / total;
+            progressNotifier.value = pct;
+            statusNotifier.value =
+                'Processing $processed of $total students (${(pct * 100).toInt()}%)';
+          }
+        },
+      );
+
+      // Close progress dialog
+      if (mounted) Navigator.of(context).pop();
+
+      if (!mounted) return;
+
+      if (result.hasError) {
+        _showSyncSnackBar(
+          icon: Icons.error_outline_rounded,
+          message: 'Sync failed: ${result.error}',
+          isError: true,
+        );
+      } else {
+        await AuditRepository().log(
+          action: AppConstants.auditSync,
+          description:
+              'Synced students from API: ${result.newlyAdded} added, '
+              '${result.alreadyExisted} already existed',
+          metadata: {
+            'total_fetched': result.totalFetched,
+            'newly_added': result.newlyAdded,
+            'already_existed': result.alreadyExisted,
+          },
+        );
+
+        // Rebuild search index after every successful sync
+        await _rebuildSearchIndexFromFirestore();
+
+        // Only refresh paginated UI if new students were actually added
+        if (result.newlyAdded > 0) {
+          ref.read(paginatedStudentsProvider.notifier).refresh();
+          ref.invalidate(studentStatsProvider);
+        }
+
+        if (!mounted) return;
+        _showSyncSnackBar(
+          icon: Icons.check_circle_outline_rounded,
+          message: result.newlyAdded > 0
+              ? 'Students synced successfully! '
+                  '${result.newlyAdded} new, ${result.alreadyExisted} existing'
+              : 'All students are already up to date '
+                  '(${result.alreadyExisted} found)',
+          isError: false,
+        );
+      }
+    } catch (e) {
+      // Close progress dialog if still open
+      if (mounted) Navigator.of(context).pop();
+
+      if (!mounted) return;
+      _showSyncSnackBar(
+        icon: Icons.error_outline_rounded,
+        message: 'Unexpected error: ${e.toString()}',
+        isError: true,
+      );
+    } finally {
+      progressNotifier.dispose();
+      statusNotifier.dispose();
+      if (mounted) setState(() => _isSyncing = false);
+    }
+  }
+
+  /// Shows a styled confirmation dialog. Returns true if user taps OK.
+  Future<bool?> _showConfirmationDialog() {
+    final cs = Theme.of(context).colorScheme;
+    final pos = context.pos;
+
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        elevation: 0,
+        backgroundColor: cs.surface,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: Padding(
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: pos.info.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.sync_rounded, color: pos.info, size: 28),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Sync Students',
+                  style: GoogleFonts.inter(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: cs.onSurface,
+                    letterSpacing: -0.4,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'This will fetch students from the server and add any new students to the system. '
+                  'Existing students and their balances will not be affected.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: cs.onSurfaceVariant,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 46,
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          style: OutlinedButton.styleFrom(
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                            side: BorderSide(
+                                color: cs.onSurfaceVariant.withValues(alpha: 0.2)),
+                          ),
+                          child: Text('Cancel',
+                              style: GoogleFonts.inter(
+                                  fontWeight: FontWeight.w600,
+                                  color: cs.onSurfaceVariant)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: SizedBox(
+                        height: 46,
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: pos.info,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: Text('Sync Now',
+                              style: GoogleFonts.inter(
+                                  fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showSyncSnackBar({
+    required IconData icon,
+    required String message,
+    required bool isError,
+  }) {
+    final pos = context.pos;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: isError ? pos.error : pos.success,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  /// Rebuilds the local search index from Firestore.
+  /// Called ONLY after sync — one full read to populate the cache.
+  Future<void> _rebuildSearchIndexFromFirestore() async {
+    final repo = ref.read(studentRepositoryProvider);
+    final allStudents = await repo.getAllStudentsForExport();
+    final index = ref.read(studentSearchIndexProvider);
+    await index.rebuild(
+      allStudents
+          .map((s) => StudentIndexEntry(studentId: s.id, name: s.name))
+          .toList(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final paginatedState = ref.watch(paginatedStudentsProvider);
     final totalBalance = ref.watch(totalWalletBalanceProvider);
     final totalDebt = ref.watch(totalDebtProvider);
+    final searchResults = ref.watch(studentSearchResultsProvider);
+    final cs = Theme.of(context).colorScheme;
+    final pos = context.pos;
+
+    // Decide which students to show: search results or paginated list
+    final isSearching = _searchQuery.isNotEmpty;
 
     return Padding(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -29,28 +320,42 @@ class StudentsScreen extends ConsumerWidget {
             children: [
               Text(
                 'Students',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: AppColors.onBackground,
+                style: GoogleFonts.inter(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w700,
+                  color: cs.onSurface,
+                  letterSpacing: -0.4,
                 ),
               ),
               const Spacer(),
-              // Stats
               _StatChip(
-                label: 'Total Balance',
+                label: 'Balance',
                 value: CurrencyFormatter.formatCompact(totalBalance),
-                color: AppColors.info,
+                color: pos.info,
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               _StatChip(
-                label: 'Total Debt',
+                label: 'Debt',
                 value: CurrencyFormatter.formatCompact(totalDebt),
-                color: AppColors.error,
+                color: pos.error,
               ),
               const SizedBox(width: 16),
+
+              // ─── Sync Students Button ───
+              _SyncButton(
+                isSyncing: _isSyncing,
+                onPressed: _syncStudents,
+              ),
+              const SizedBox(width: 8),
+
               ElevatedButton.icon(
                 onPressed: () => _showAddStudentDialog(context),
                 icon: const Icon(Icons.person_add_rounded, size: 18),
                 label: const Text('Add Student'),
+                style: ElevatedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
               ),
             ],
           ),
@@ -62,6 +367,7 @@ class StudentsScreen extends ConsumerWidget {
             child: SearchField(
               hintText: 'Search by name or ID...',
               onChanged: (query) {
+                setState(() => _searchQuery = query);
                 ref.read(studentSearchQueryProvider.notifier).state = query;
               },
             ),
@@ -70,42 +376,13 @@ class StudentsScreen extends ConsumerWidget {
 
           // ─── Students Grid ───
           Expanded(
-            child: studentsAsync.when(
-              loading: () => const Center(
-                child: CircularProgressIndicator(color: AppColors.primary),
-              ),
-              error: (error, _) => Center(
-                child: Text('Error: $error', style: const TextStyle(color: AppColors.error)),
-              ),
-              data: (_) {
-                if (filtered.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.school_outlined, size: 64,
-                            color: AppColors.onSurfaceVariant.withValues(alpha: 0.3)),
-                        const SizedBox(height: 16),
-                        const Text('No students found',
-                            style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 18)),
-                      ],
-                    ),
-                  );
-                }
-
-                return GridView.builder(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 4,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 1.8,
-                  ),
-                  itemCount: filtered.length,
-                  itemBuilder: (context, index) {
-                    return _StudentCard(student: filtered[index]);
-                  },
-                );
-              },
+            child: _buildStudentGrid(
+              context: context,
+              isSearching: isSearching,
+              paginatedState: paginatedState,
+              searchResults: searchResults,
+              cs: cs,
+              pos: pos,
             ),
           ),
         ],
@@ -113,29 +390,171 @@ class StudentsScreen extends ConsumerWidget {
     );
   }
 
+  Widget _buildStudentGrid({
+    required BuildContext context,
+    required bool isSearching,
+    required PaginatedStudentsState paginatedState,
+    required AsyncValue<List<Student>> searchResults,
+    required ColorScheme cs,
+    required POSColors pos,
+  }) {
+    // ─── Search Mode ───
+    if (isSearching) {
+      return searchResults.when(
+        loading: () => Center(
+          child: CircularProgressIndicator(color: cs.primary, strokeWidth: 2.5),
+        ),
+        error: (error, _) => Center(
+          child: Text('Error: $error', style: TextStyle(color: pos.error)),
+        ),
+        data: (students) {
+          if (students.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.search_off_rounded,
+                      size: 56,
+                      color: cs.onSurfaceVariant.withValues(alpha: 0.2)),
+                  const SizedBox(height: 16),
+                  Text('No students found',
+                      style: GoogleFonts.inter(
+                          color: cs.onSurfaceVariant, fontSize: 16)),
+                ],
+              ),
+            );
+          }
+          return GridView.builder(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              childAspectRatio: 2.0,
+            ),
+            itemCount: students.length,
+            itemBuilder: (context, index) {
+              return _StudentCard(student: students[index]);
+            },
+          );
+        },
+      );
+    }
+
+    // ─── Paginated Mode (default) ───
+    if (paginatedState.isLoading) {
+      return Center(
+        child: CircularProgressIndicator(color: cs.primary, strokeWidth: 2.5),
+      );
+    }
+
+    if (paginatedState.error != null) {
+      return Center(
+        child: Text('Error: ${paginatedState.error}',
+            style: TextStyle(color: pos.error)),
+      );
+    }
+
+    if (paginatedState.students.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.school_outlined,
+                size: 56,
+                color: cs.onSurfaceVariant.withValues(alpha: 0.2)),
+            const SizedBox(height: 16),
+            Text('No students found',
+                style: GoogleFonts.inter(
+                    color: cs.onSurfaceVariant, fontSize: 16)),
+          ],
+        ),
+      );
+    }
+
+    final students = paginatedState.students;
+    // +1 for loading indicator when loadingMore
+    final itemCount = students.length + (paginatedState.hasMore ? 1 : 0);
+
+    return GridView.builder(
+      controller: _scrollController,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+        childAspectRatio: 2.0,
+      ),
+      itemCount: itemCount,
+      itemBuilder: (context, index) {
+        if (index >= students.length) {
+          // Loading indicator at the end
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: paginatedState.isLoadingMore
+                  ? SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: cs.primary),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          );
+        }
+        return _StudentCard(student: students[index]);
+      },
+    );
+  }
+
   void _showAddStudentDialog(BuildContext context) {
     final idController = TextEditingController();
     final nameController = TextEditingController();
     final balanceController = TextEditingController(text: '0');
+    final pos = context.pos;
+    final cs = Theme.of(context).colorScheme;
 
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
-        backgroundColor: AppColors.surfaceVariant,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        elevation: 0,
+        backgroundColor: Theme.of(ctx).colorScheme.surface,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 400),
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(28),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Add Student', style: Theme.of(ctx).textTheme.titleLarge),
-                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Text('Add Student',
+                        style: GoogleFonts.inter(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.4)),
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(ctx),
+                      child: Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: cs.onSurfaceVariant.withValues(alpha: 0.08),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.close_rounded,
+                            size: 16, color: cs.onSurfaceVariant),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
                 TextField(
                   controller: idController,
-                  decoration: const InputDecoration(labelText: 'Admission Number'),
+                  decoration:
+                      const InputDecoration(labelText: 'Admission Number'),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -146,18 +565,24 @@ class StudentsScreen extends ConsumerWidget {
                 TextField(
                   controller: balanceController,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Initial Balance (₹)'),
+                  decoration:
+                      const InputDecoration(labelText: 'Initial Balance (₹)'),
                 ),
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
+                  height: 50,
                   child: ElevatedButton(
                     onPressed: () async {
-                      if (idController.text.isEmpty || nameController.text.isEmpty) return;
+                      if (idController.text.isEmpty ||
+                          nameController.text.isEmpty) {
+                        return;
+                      }
                       final student = Student(
                         id: idController.text.trim(),
                         name: nameController.text.trim(),
-                        balance: double.tryParse(balanceController.text) ?? 0,
+                        balance:
+                            double.tryParse(balanceController.text) ?? 0,
                         debt: 0,
                         updatedAt: DateTime.now(),
                       );
@@ -165,21 +590,39 @@ class StudentsScreen extends ConsumerWidget {
                         await StudentRepository().addStudent(student);
                         await AuditRepository().log(
                           action: AppConstants.auditEdit,
-                          description: 'Added student: ${student.name} (${student.id})',
+                          description:
+                              'Added student: ${student.name} (${student.id})',
                         );
+                        // Update local search index
+                        final index = ref.read(studentSearchIndexProvider);
+                        await index.addEntry(StudentIndexEntry(
+                          studentId: student.id,
+                          name: student.name,
+                        ));
+                        // Refresh paginated list & stats
+                        ref.read(paginatedStudentsProvider.notifier).refresh();
+                        ref.invalidate(studentStatsProvider);
                         if (ctx.mounted) Navigator.pop(ctx);
                       } catch (e) {
                         if (ctx.mounted) {
                           ScaffoldMessenger.of(ctx).showSnackBar(
                             SnackBar(
-                              content: Text(e.toString().replaceAll('Exception: ', '')),
-                              backgroundColor: AppColors.error,
+                              content: Text(e
+                                  .toString()
+                                  .replaceAll('Exception: ', '')),
+                              backgroundColor: pos.error,
                             ),
                           );
                         }
                       }
                     },
-                    child: const Text('Add Student'),
+                    style: ElevatedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: Text('Add Student',
+                        style: GoogleFonts.inter(
+                            fontSize: 16, fontWeight: FontWeight.w600)),
                   ),
                 ),
               ],
@@ -191,63 +634,299 @@ class StudentsScreen extends ConsumerWidget {
   }
 }
 
-class _StudentCard extends StatelessWidget {
+/// Animated sync button with loading state
+class _SyncButton extends StatelessWidget {
+  final bool isSyncing;
+  final VoidCallback onPressed;
+
+  const _SyncButton({
+    required this.isSyncing,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final pos = context.pos;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+      child: ElevatedButton.icon(
+        onPressed: isSyncing ? null : onPressed,
+        icon: isSyncing
+            ? SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation(
+                    cs.onSurfaceVariant.withValues(alpha: 0.5),
+                  ),
+                ),
+              )
+            : Icon(Icons.sync_rounded, size: 18, color: pos.info),
+        label: Text(
+          isSyncing ? 'Syncing...' : 'Sync Students',
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: isSyncing
+                ? cs.onSurfaceVariant.withValues(alpha: 0.5)
+                : pos.info,
+          ),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: pos.info.withValues(alpha: 0.08),
+          foregroundColor: pos.info,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: isSyncing
+                  ? Colors.transparent
+                  : pos.info.withValues(alpha: 0.2),
+              width: 1,
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
+      ),
+    );
+  }
+}
+
+/// Progress dialog shown during sync — animated circular progress + percentage
+class _SyncProgressDialog extends StatelessWidget {
+  final ValueNotifier<double> progress;
+  final ValueNotifier<String> status;
+
+  const _SyncProgressDialog({
+    required this.progress,
+    required this.status,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final pos = context.pos;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      elevation: 0,
+      backgroundColor: cs.surface,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ─── Circular Progress with Percentage ───
+              ValueListenableBuilder<double>(
+                valueListenable: progress,
+                builder: (_, value, __) {
+                  final pct = (value * 100).toInt();
+                  return SizedBox(
+                    width: 100,
+                    height: 100,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        SizedBox(
+                          width: 100,
+                          height: 100,
+                          child: CircularProgressIndicator(
+                            value: value > 0 ? value : null,
+                            strokeWidth: 6,
+                            backgroundColor:
+                                pos.info.withValues(alpha: 0.12),
+                            valueColor:
+                                AlwaysStoppedAnimation(pos.info),
+                            strokeCap: StrokeCap.round,
+                          ),
+                        ),
+                        if (value > 0)
+                          Text(
+                            '$pct%',
+                            style: GoogleFonts.inter(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w700,
+                              color: pos.info,
+                            ),
+                          )
+                        else
+                          Icon(Icons.sync_rounded,
+                              color: pos.info, size: 28),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 24),
+
+              // ─── Title ───
+              Text(
+                'Syncing Students',
+                style: GoogleFonts.inter(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: cs.onSurface,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              // ─── Status Text ───
+              ValueListenableBuilder<String>(
+                valueListenable: status,
+                builder: (_, text, __) => Text(
+                  text,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: cs.onSurfaceVariant,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // ─── Linear Progress Bar ───
+              ValueListenableBuilder<double>(
+                valueListenable: progress,
+                builder: (_, value, __) => ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: LinearProgressIndicator(
+                    value: value > 0 ? value : null,
+                    minHeight: 6,
+                    backgroundColor: pos.info.withValues(alpha: 0.1),
+                    valueColor: AlwaysStoppedAnimation(pos.info),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StudentCard extends StatefulWidget {
   final Student student;
 
   const _StudentCard({required this.student});
 
   @override
+  State<_StudentCard> createState() => _StudentCardState();
+}
+
+class _StudentCardState extends State<_StudentCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _scaleCtrl;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _scaleCtrl = AnimationController(
+        duration: const Duration(milliseconds: 150), vsync: this);
+    _scale = Tween<double>(begin: 1.0, end: 0.97)
+        .animate(CurvedAnimation(parent: _scaleCtrl, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _scaleCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Card(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () {},
-        child: Padding(
-          padding: const EdgeInsets.all(14),
+    final cs = Theme.of(context).colorScheme;
+    final pos = context.pos;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTapDown: (_) => _scaleCtrl.forward(),
+      onTapUp: (_) {
+        _scaleCtrl.reverse();
+        showDialog(
+          context: context,
+          builder: (ctx) =>
+              StudentDetailDialog(student: widget.student),
+        );
+      },
+      onTapCancel: () => _scaleCtrl.reverse(),
+      child: AnimatedBuilder(
+        animation: _scale,
+        builder: (_, child) =>
+            Transform.scale(scale: _scale.value, child: child),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: cs.surface,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+            border: isDark
+                ? Border.all(
+                    color: Colors.white.withValues(alpha: 0.06), width: 0.5)
+                : null,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
                 children: [
+                  // Circular avatar
                   Container(
-                    width: 36,
-                    height: 36,
+                    width: 38,
+                    height: 38,
                     decoration: BoxDecoration(
-                      color: AppColors.primaryContainer,
-                      borderRadius: BorderRadius.circular(10),
+                      color: cs.primary.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
                     ),
                     child: Center(
                       child: Text(
-                        student.name.isNotEmpty ? student.name[0].toUpperCase() : '?',
-                        style: const TextStyle(
-                          color: AppColors.primary,
+                        widget.student.name.isNotEmpty
+                            ? widget.student.name[0].toUpperCase()
+                            : '?',
+                        style: GoogleFonts.inter(
+                          color: cs.primary,
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          student.name,
-                          style: const TextStyle(
+                          widget.student.name,
+                          style: GoogleFonts.inter(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.onSurface,
+                            color: cs.onSurface,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         Text(
-                          'ID: ${student.id}',
-                          style: const TextStyle(
+                          'ID: ${widget.student.id}',
+                          style: GoogleFonts.inter(
                             fontSize: 11,
-                            color: AppColors.onSurfaceVariant,
+                            color: cs.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -257,34 +936,36 @@ class _StudentCard extends StatelessWidget {
               ),
               Row(
                 children: [
-                  // Balance
+                  // Balance pill
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: AppColors.infoContainer,
-                      borderRadius: BorderRadius.circular(6),
+                      color: pos.info.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
-                      CurrencyFormatter.formatCompact(student.balance),
-                      style: const TextStyle(
-                        color: AppColors.info,
+                      CurrencyFormatter.formatCompact(widget.student.balance),
+                      style: GoogleFonts.inter(
+                        color: pos.info,
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
-                  if (student.hasDebt) ...[
+                  if (widget.student.hasDebt) ...[
                     const SizedBox(width: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: AppColors.errorContainer,
-                        borderRadius: BorderRadius.circular(6),
+                        color: pos.error.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
-                        '-${CurrencyFormatter.formatCompact(student.debt)}',
-                        style: const TextStyle(
-                          color: AppColors.error,
+                        '-${CurrencyFormatter.formatCompact(widget.student.debt)}',
+                        style: GoogleFonts.inter(
+                          color: pos.error,
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                         ),
@@ -292,15 +973,19 @@ class _StudentCard extends StatelessWidget {
                     ),
                   ],
                   const Spacer(),
-                  // Recharge button
                   SizedBox(
                     height: 30,
                     child: TextButton.icon(
-                      onPressed: () => _showRechargeDialog(context, student),
-                      icon: const Icon(Icons.add_circle_outline_rounded, size: 16),
-                      label: const Text('Recharge', style: TextStyle(fontSize: 12)),
+                      onPressed: () =>
+                          _showRechargeDialog(context, widget.student),
+                      icon: Icon(Icons.add_circle_outline_rounded,
+                          size: 14, color: cs.primary),
+                      label: Text('Recharge',
+                          style: GoogleFonts.inter(
+                              fontSize: 12, color: cs.primary)),
                       style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 8),
                         minimumSize: Size.zero,
                       ),
                     ),
@@ -316,58 +1001,76 @@ class _StudentCard extends StatelessWidget {
 
   void _showRechargeDialog(BuildContext context, Student student) {
     final amountController = TextEditingController();
+    final cs = Theme.of(context).colorScheme;
+    final pos = context.pos;
 
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
-        backgroundColor: AppColors.surfaceVariant,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        elevation: 0,
+        backgroundColor: Theme.of(ctx).colorScheme.surface,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 360),
+          constraints: const BoxConstraints(maxWidth: 380),
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(28),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Recharge Wallet', style: Theme.of(ctx).textTheme.titleLarge),
+                Text('Recharge Wallet',
+                    style: GoogleFonts.inter(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.4)),
                 const SizedBox(height: 8),
                 Text('${student.name} (${student.id})',
-                    style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 14)),
-                const SizedBox(height: 6),
+                    style: GoogleFonts.inter(
+                        color: cs.onSurfaceVariant, fontSize: 14)),
+                const SizedBox(height: 8),
                 Row(
                   children: [
                     Text('Current Balance: ',
-                        style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 13)),
+                        style: GoogleFonts.inter(
+                            color: cs.onSurfaceVariant, fontSize: 13)),
                     Text(CurrencyFormatter.format(student.balance),
-                        style: const TextStyle(color: AppColors.info, fontWeight: FontWeight.w600, fontSize: 13)),
+                        style: GoogleFonts.inter(
+                            color: pos.info,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13)),
                   ],
                 ),
                 if (student.hasDebt) ...[
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Text('Current Debt: ',
-                          style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 13)),
+                      Text('Current Debt: ',
+                          style: GoogleFonts.inter(
+                              color: cs.onSurfaceVariant, fontSize: 13)),
                       Text(CurrencyFormatter.format(student.debt),
-                          style: const TextStyle(color: AppColors.error, fontWeight: FontWeight.w600, fontSize: 13)),
+                          style: GoogleFonts.inter(
+                              color: pos.error,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13)),
                     ],
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppColors.warningContainer,
-                      borderRadius: BorderRadius.circular(8),
+                      color: pos.warning.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Row(
+                    child: Row(
                       children: [
-                        Icon(Icons.info_outline_rounded, size: 14, color: AppColors.warning),
-                        SizedBox(width: 6),
+                        Icon(Icons.info_outline_rounded,
+                            size: 14, color: pos.warning),
+                        const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             'Debt will be automatically cleared from recharge amount',
-                            style: TextStyle(color: AppColors.warning, fontSize: 11),
+                            style: GoogleFonts.inter(
+                                color: pos.warning, fontSize: 11),
                           ),
                         ),
                       ],
@@ -384,27 +1087,38 @@ class _StudentCard extends StatelessWidget {
                     prefixText: '₹ ',
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
+                  height: 50,
                   child: ElevatedButton(
                     onPressed: () async {
-                      final amount = double.tryParse(amountController.text);
+                      final amount =
+                          double.tryParse(amountController.text);
                       if (amount == null || amount <= 0) return;
 
-                      await StudentRepository().rechargeWallet(student.id, amount);
+                      await StudentRepository()
+                          .rechargeWallet(student.id, amount);
                       await AuditRepository().log(
                         action: AppConstants.auditRecharge,
-                        description: 'Recharged ${student.name}: ${CurrencyFormatter.format(amount)}',
-                        metadata: {'student_id': student.id, 'amount': amount},
+                        description:
+                            'Recharged ${student.name}: ${CurrencyFormatter.format(amount)}',
+                        metadata: {
+                          'student_id': student.id,
+                          'amount': amount
+                        },
                       );
                       if (ctx.mounted) Navigator.pop(ctx);
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.info,
+                      backgroundColor: pos.info,
                       foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
                     ),
-                    child: const Text('Recharge'),
+                    child: Text('Recharge',
+                        style: GoogleFonts.inter(
+                            fontSize: 16, fontWeight: FontWeight.w600)),
                   ),
                 ),
               ],
@@ -430,18 +1144,21 @@ class _StatChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 12)),
-          const SizedBox(width: 8),
-          Text(value, style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.w700)),
+          Text(label,
+              style: GoogleFonts.inter(
+                  color: color.withValues(alpha: 0.6), fontSize: 12)),
+          const SizedBox(width: 6),
+          Text(value,
+              style: GoogleFonts.inter(
+                  color: color, fontSize: 14, fontWeight: FontWeight.w700)),
         ],
       ),
     );

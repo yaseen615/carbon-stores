@@ -26,14 +26,6 @@ void main() async {
     DeviceOrientation.landscapeRight,
   ]);
 
-  // Set system UI overlay style
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-    systemNavigationBarColor: Color(0xFF121010),
-    systemNavigationBarIconBrightness: Brightness.light,
-  ));
-
   runApp(
     const ProviderScope(
       child: CarbonGurukulamStoreApp(),

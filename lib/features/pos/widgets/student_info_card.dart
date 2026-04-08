@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/theme/app_colors.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../../core/theme/pos_colors.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../providers/student_providers.dart';
 import '../../../data/models/student_model.dart';
@@ -63,22 +64,34 @@ class _SelectedStudentView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final pos = context.pos;
+
     return Container(
       padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: pos.fill,
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Row(
         children: [
-          // Avatar
+          // Avatar — circular
           Container(
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: AppColors.infoContainer,
-              borderRadius: BorderRadius.circular(10),
+              color: pos.info.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.person_rounded,
-              size: 20,
-              color: AppColors.info,
+            child: Center(
+              child: Text(
+                student.name.isNotEmpty ? student.name[0].toUpperCase() : '?',
+                style: GoogleFonts.inter(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: pos.info,
+                ),
+              ),
             ),
           ),
           const SizedBox(width: 10),
@@ -89,54 +102,49 @@ class _SelectedStudentView extends StatelessWidget {
               children: [
                 Text(
                   student.name,
-                  style: const TextStyle(
+                  style: GoogleFonts.inter(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.onSurface,
+                    color: cs.onSurface,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 3),
                 Row(
                   children: [
-                    Text(
-                      'ID: ${student.id}',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
+                    // Balance pill
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: AppColors.infoContainer,
-                        borderRadius: BorderRadius.circular(4),
+                        color: pos.info.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
                         CurrencyFormatter.formatCompact(student.balance),
-                        style: const TextStyle(
+                        style: GoogleFonts.inter(
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.info,
+                          color: pos.info,
                         ),
                       ),
                     ),
                     if (student.hasDebt) ...[
                       const SizedBox(width: 4),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: AppColors.errorContainer,
-                          borderRadius: BorderRadius.circular(4),
+                          color: pos.error.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
                           '-${CurrencyFormatter.formatCompact(student.debt)}',
-                          style: const TextStyle(
+                          style: GoogleFonts.inter(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
-                            color: AppColors.error,
+                            color: pos.error,
                           ),
                         ),
                       ),
@@ -146,13 +154,19 @@ class _SelectedStudentView extends StatelessWidget {
               ],
             ),
           ),
-          // Clear
-          IconButton(
-            icon: const Icon(Icons.close_rounded, size: 18),
-            onPressed: onClear,
-            color: AppColors.onSurfaceVariant,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          // Close
+          GestureDetector(
+            onTap: onClear,
+            child: Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: cs.onSurfaceVariant.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.close_rounded,
+                  size: 14, color: cs.onSurfaceVariant),
+            ),
           ),
         ],
       ),
@@ -175,24 +189,32 @@ class _StudentSearch extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final pos = context.pos;
+
     if (!isSearching) {
       return InkWell(
         onTap: () => onSearchToggle(true),
+        borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: pos.fill,
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: Row(
             children: [
               Icon(
                 Icons.person_add_rounded,
                 size: 18,
-                color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
+                color: cs.onSurfaceVariant.withValues(alpha: 0.4),
               ),
               const SizedBox(width: 8),
               Text(
                 'Link student (optional)',
-                style: TextStyle(
+                style: GoogleFonts.inter(
                   fontSize: 13,
-                  color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.4),
                 ),
               ),
             ],
@@ -201,32 +223,29 @@ class _StudentSearch extends ConsumerWidget {
       );
     }
 
-    final studentsAsync = ref.watch(studentsStreamProvider);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         // Search Input
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+          padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
           child: Row(
             children: [
               Expanded(
                 child: TextField(
                   controller: controller,
                   autofocus: true,
-                  style: const TextStyle(fontSize: 13, color: AppColors.onSurface),
+                  style: GoogleFonts.inter(fontSize: 13, color: cs.onSurface),
                   decoration: InputDecoration(
                     hintText: 'Search by ID or name...',
-                    prefixIcon: const Icon(Icons.search, size: 18),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    hintStyle: GoogleFonts.inter(
+                        fontSize: 13, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+                    prefixIcon: Icon(Icons.search_rounded,
+                        size: 18, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     isDense: true,
-                    filled: true,
-                    fillColor: AppColors.surfaceContainer,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide.none,
-                    ),
                   ),
                   onChanged: (value) {
                     ref.read(studentSearchQueryProvider.notifier).state = value;
@@ -234,70 +253,110 @@ class _StudentSearch extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: 4),
-              IconButton(
-                icon: const Icon(Icons.close, size: 18),
-                onPressed: () {
+              GestureDetector(
+                onTap: () {
                   controller.clear();
                   ref.read(studentSearchQueryProvider.notifier).state = '';
                   onSearchToggle(false);
                 },
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.08),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.close_rounded,
+                      size: 16, color: cs.onSurfaceVariant),
+                ),
               ),
             ],
           ),
         ),
 
         // Results
-        studentsAsync.when(
-          loading: () => const Padding(
-            padding: EdgeInsets.all(12),
-            child: SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-            ),
-          ),
-          error: (_, __) => const Padding(
-            padding: EdgeInsets.all(12),
-            child: Text('Error loading students', style: TextStyle(color: AppColors.error, fontSize: 12)),
-          ),
-          data: (_) {
-            final filtered = ref.watch(filteredStudentsProvider);
+        Builder(
+          builder: (_) {
             final query = ref.watch(studentSearchQueryProvider);
 
             if (query.isEmpty) {
               return const SizedBox(height: 4);
             }
 
-            if (filtered.isEmpty) {
-              return const Padding(
-                padding: EdgeInsets.all(12),
-                child: Text('No students found', style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
-              );
-            }
+            final searchAsync = ref.watch(studentSearchResultsProvider);
 
-            return ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 120),
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: filtered.length.clamp(0, 5),
-                itemBuilder: (context, index) {
-                  final student = filtered[index];
-                  return ListTile(
-                    dense: true,
-                    visualDensity: VisualDensity.compact,
-                    leading: const Icon(Icons.person_rounded, size: 18, color: AppColors.info),
-                    title: Text(student.name, style: const TextStyle(fontSize: 13, color: AppColors.onSurface)),
-                    subtitle: Text('ID: ${student.id}', style: const TextStyle(fontSize: 11, color: AppColors.onSurfaceVariant)),
-                    trailing: Text(
-                      CurrencyFormatter.formatCompact(student.balance),
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.info),
-                    ),
-                    onTap: () => onStudentSelected(student),
-                  );
-                },
+            return searchAsync.when(
+              loading: () => Padding(
+                padding: const EdgeInsets.all(12),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
+                ),
               ),
+              error: (_, __) => Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text('Error loading students',
+                    style: GoogleFonts.inter(color: pos.error, fontSize: 12)),
+              ),
+              data: (filtered) {
+                if (filtered.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text('No students found',
+                        style: GoogleFonts.inter(
+                            color: cs.onSurfaceVariant, fontSize: 12)),
+                  );
+                }
+
+                return ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 120),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: filtered.length.clamp(0, 5),
+                    itemBuilder: (context, index) {
+                      final student = filtered[index];
+                      return InkWell(
+                        onTap: () => onStudentSelected(student),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          child: Row(
+                            children: [
+                              Icon(Icons.person_rounded,
+                                  size: 16, color: pos.info),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(student.name,
+                                        style: GoogleFonts.inter(
+                                            fontSize: 13, color: cs.onSurface)),
+                                    Text('ID: ${student.id}',
+                                        style: GoogleFonts.inter(
+                                            fontSize: 11,
+                                            color: cs.onSurfaceVariant)),
+                                  ],
+                                ),
+                              ),
+                              Text(
+                                CurrencyFormatter.formatCompact(student.balance),
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: pos.info,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
             );
           },
         ),

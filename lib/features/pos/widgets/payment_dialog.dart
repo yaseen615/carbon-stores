@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/theme/app_colors.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../../core/theme/pos_colors.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../core/utils/receipt_id_generator.dart';
-import '../../../data/models/transaction_model.dart';
-import '../../../data/repositories/product_repository.dart';
-import '../../../data/repositories/student_repository.dart';
-import '../../../data/repositories/transaction_repository.dart';
-import '../../../data/repositories/audit_repository.dart';
+import '../../../data/repositories/checkout_repository.dart';
 import '../../../providers/cart_providers.dart';
 import '../../../providers/student_providers.dart';
 import 'receipt_dialog.dart';
@@ -25,11 +22,23 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
   bool _isProcessing = false;
   String? _error;
 
+  final TextEditingController _mixedWalletController = TextEditingController();
+  final TextEditingController _mixedCashController = TextEditingController();
+
+  @override
+  void dispose() {
+    _mixedWalletController.dispose();
+    _mixedCashController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final cartItems = ref.watch(cartProvider);
     final cartTotal = ref.watch(cartTotalProvider);
     final selectedStudent = ref.watch(selectedStudentProvider);
+    final cs = Theme.of(context).colorScheme;
+    final pos = context.pos;
 
     final hasStudent = selectedStudent != null;
     final walletBalance = selectedStudent?.balance ?? 0.0;
@@ -38,6 +47,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
     double walletDeduction = 0;
     double cashAmount = cartTotal;
     double debtAmount = 0;
+    String? localError;
 
     if (_paymentMode == AppConstants.paymentWallet && hasStudent) {
       if (walletBalance >= cartTotal) {
@@ -49,23 +59,27 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
         debtAmount = cartTotal - walletBalance;
       }
     } else if (_paymentMode == AppConstants.paymentMixed && hasStudent) {
-      if (walletBalance >= cartTotal) {
-        walletDeduction = cartTotal;
-        cashAmount = 0;
-      } else {
-        walletDeduction = walletBalance;
-        cashAmount = cartTotal - walletBalance;
+      walletDeduction = double.tryParse(_mixedWalletController.text) ?? 0.0;
+      cashAmount = double.tryParse(_mixedCashController.text) ?? 0.0;
+
+      if (walletDeduction > walletBalance) {
+        localError = 'Wallet deduction exceeds balance (${CurrencyFormatter.format(walletBalance)})';
       }
+
+      debtAmount = cartTotal - (walletDeduction + cashAmount);
+      if (debtAmount < 0) debtAmount = 0;
     }
 
+    final displayError = _error ?? localError;
 
     return Dialog(
-      backgroundColor: AppColors.surfaceVariant,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      elevation: 0,
+      backgroundColor: cs.surface,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 440),
+        constraints: const BoxConstraints(maxWidth: 460),
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(28),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -73,73 +87,90 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
               // Title
               Row(
                 children: [
-                  const Icon(Icons.payment_rounded, color: AppColors.primary, size: 24),
-                  const SizedBox(width: 10),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: cs.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.payment_rounded, color: cs.primary, size: 22),
+                  ),
+                  const SizedBox(width: 12),
                   Text(
                     'Complete Payment',
-                    style: Theme.of(context).textTheme.titleLarge,
+                    style: GoogleFonts.inter(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface,
+                      letterSpacing: -0.4,
+                    ),
                   ),
                   const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded, size: 20),
-                    onPressed: () => Navigator.pop(context),
-                    color: AppColors.onSurfaceVariant,
-                  ),
+                  _CloseCircle(onTap: () => Navigator.pop(context)),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
 
               // Order Summary
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: AppColors.surfaceContainer,
-                  borderRadius: BorderRadius.circular(12),
+                  color: pos.fill,
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 child: Column(
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Items', style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 14)),
-                        Text('${cartItems.length} products', style: const TextStyle(color: AppColors.onSurface, fontSize: 14)),
+                        Text('Items',
+                            style: GoogleFonts.inter(color: cs.onSurfaceVariant, fontSize: 14)),
+                        Text('${cartItems.length} products',
+                            style: GoogleFonts.inter(color: cs.onSurface, fontSize: 14)),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Total', style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 14)),
+                        Text('Total',
+                            style: GoogleFonts.inter(color: cs.onSurfaceVariant, fontSize: 14)),
                         Text(
                           CurrencyFormatter.format(cartTotal),
-                          style: const TextStyle(
-                            color: AppColors.onBackground,
-                            fontSize: 20,
+                          style: GoogleFonts.inter(
+                            color: cs.onSurface,
+                            fontSize: 22,
                             fontWeight: FontWeight.w700,
+                            letterSpacing: -0.4,
                           ),
                         ),
                       ],
                     ),
                     if (hasStudent) ...[
-                      const Divider(height: 16, color: AppColors.divider),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Divider(height: 1, color: pos.divider),
+                      ),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text('${selectedStudent.name}\'s Wallet',
-                              style: const TextStyle(color: AppColors.info, fontSize: 13)),
+                              style: GoogleFonts.inter(color: pos.info, fontSize: 13)),
                           Text(CurrencyFormatter.format(walletBalance),
-                              style: const TextStyle(color: AppColors.info, fontSize: 13, fontWeight: FontWeight.w600)),
+                              style: GoogleFonts.inter(
+                                  color: pos.info, fontSize: 13, fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ],
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
 
               // Payment Mode Selection
-              const Text('Payment Mode',
-                  style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 13, fontWeight: FontWeight.w600)),
+              Text('Payment Method',
+                  style: GoogleFonts.inter(
+                      color: cs.onSurfaceVariant, fontSize: 13, fontWeight: FontWeight.w600)),
               const SizedBox(height: 10),
 
               Row(
@@ -172,15 +203,49 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+
+              // Mixed Mode Explicit Inputs
+              if (_paymentMode == AppConstants.paymentMixed && hasStudent) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _mixedWalletController,
+                        keyboardType:
+                            const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'Take from Wallet',
+                          isDense: true,
+                        ),
+                        onChanged: (_) => setState(() => _error = null),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: _mixedCashController,
+                        keyboardType:
+                            const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'Take in Cash',
+                          isDense: true,
+                        ),
+                        onChanged: (_) => setState(() => _error = null),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ],
 
               // Payment Breakdown
               if (_paymentMode != AppConstants.paymentCash && hasStudent) ...[
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: AppColors.surfaceContainer,
-                    borderRadius: BorderRadius.circular(10),
+                    color: pos.fill,
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
                     children: [
@@ -188,19 +253,19 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
                         _BreakdownRow(
                           label: 'Wallet Deduction',
                           amount: walletDeduction,
-                          color: AppColors.info,
+                          color: pos.info,
                         ),
                       if (cashAmount > 0)
                         _BreakdownRow(
                           label: 'Cash',
                           amount: cashAmount,
-                          color: AppColors.onSurface,
+                          color: cs.onSurface,
                         ),
                       if (debtAmount > 0)
                         _BreakdownRow(
                           label: 'Added to Debt',
                           amount: debtAmount,
-                          color: AppColors.error,
+                          color: pos.error,
                         ),
                     ],
                   ),
@@ -209,36 +274,42 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
               ],
 
               // Error
-              if (_error != null) ...[
+              if (displayError != null) ...[
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.errorContainer,
-                    borderRadius: BorderRadius.circular(8),
+                    color: pos.errorContainer,
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.error_outline, size: 16, color: AppColors.error),
+                      Icon(Icons.error_outline, size: 16, color: pos.error),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(_error!, style: const TextStyle(color: AppColors.error, fontSize: 12)),
+                        child: Text(displayError,
+                            style: GoogleFonts.inter(color: pos.error, fontSize: 13)),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
               ],
 
               // Confirm Button
               SizedBox(
                 width: double.infinity,
+                height: 52,
                 child: ElevatedButton(
-                  onPressed: _isProcessing ? null : _processPayment,
+                  onPressed: (_isProcessing || localError != null)
+                      ? null
+                      : _processPayment,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.success,
+                    backgroundColor: pos.success,
                     foregroundColor: Colors.white,
-                    minimumSize: const Size(0, 52),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                    elevation: 0,
+                    disabledBackgroundColor: pos.success.withValues(alpha: 0.4),
                   ),
                   child: _isProcessing
                       ? const SizedBox(
@@ -250,8 +321,9 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
                           ),
                         )
                       : Text(
-                          'Confirm Payment — ${CurrencyFormatter.format(cartTotal)}',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                          'Confirm — ${CurrencyFormatter.format(cartTotal)}',
+                          style: GoogleFonts.inter(
+                              fontSize: 16, fontWeight: FontWeight.w700),
                         ),
                 ),
               ),
@@ -275,61 +347,51 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
 
       final receiptId = ReceiptIdGenerator.generate();
 
-      double walletDeducted = 0;
-      double cashAmount = cartTotal;
-      double debtAmount = 0;
+      double? mixedWallet;
+      double? mixedCash;
 
-      // Process wallet payment if applicable
-      if (_paymentMode != AppConstants.paymentCash && selectedStudent != null) {
-        final studentRepo = StudentRepository();
-        final result = await studentRepo.deductWallet(selectedStudent.id, cartTotal);
-        walletDeducted = result['wallet_deducted'] ?? 0;
-        debtAmount = result['debt_added'] ?? 0;
-
-        if (_paymentMode == AppConstants.paymentMixed) {
-          cashAmount = cartTotal - walletDeducted;
-          debtAmount = 0; // Mixed means remaining is cash, not debt
-        } else {
-          cashAmount = 0;
-        }
+      if (_paymentMode == AppConstants.paymentMixed) {
+        mixedWallet = double.tryParse(_mixedWalletController.text) ?? 0.0;
+        mixedCash = double.tryParse(_mixedCashController.text) ?? 0.0;
       }
 
-      // Update stock for all products
-      final productRepo = ProductRepository();
-      final stockChanges = <String, int>{};
-      for (final item in cartItems) {
-        stockChanges[item.productId] = -(item.quantity);
-      }
-      await productRepo.batchUpdateStock(stockChanges);
-
-      // Create transaction record
-      final transactionRepo = TransactionRepository();
-      final transaction = StoreTransaction(
-        id: '',
-        receiptId: receiptId,
-        items: cartItems,
-        totalAmount: cartTotal,
+      // Process atomic checkout
+      final checkoutRepo = CheckoutRepository();
+      final savedTransaction = await checkoutRepo.processCheckout(
+        cartItems: cartItems,
+        cartTotal: cartTotal,
         paymentMode: _paymentMode,
-        paidAmount: walletDeducted + cashAmount,
-        debtAmount: debtAmount,
+        receiptId: receiptId,
         studentId: selectedStudent?.id,
         studentName: selectedStudent?.name,
-        createdAt: DateTime.now(),
+        userId: 'admin',
+        mixedWalletAmount: mixedWallet,
+        mixedCashAmount: mixedCash,
       );
-      await transactionRepo.createTransaction(transaction);
 
-      // Log audit
-      final auditRepo = AuditRepository();
-      await auditRepo.log(
-        action: AppConstants.auditSale,
-        description: 'Sale: $receiptId — ${CurrencyFormatter.format(cartTotal)} (${_paymentMode})',
-        metadata: {
-          'receipt_id': receiptId,
-          'total': cartTotal,
-          'payment_mode': _paymentMode,
-          'student_id': selectedStudent?.id,
-        },
-      );
+      // Re-calculate the display amounts for the receipt dialog
+      double walletDeductedDisplay = 0;
+      double debtAmountDisplay = 0;
+      double cashAmountDisplay = cartTotal;
+
+      if (_paymentMode != AppConstants.paymentCash && selectedStudent != null) {
+        if (_paymentMode == AppConstants.paymentWallet) {
+          if (selectedStudent.balance >= cartTotal) {
+            walletDeductedDisplay = cartTotal;
+            cashAmountDisplay = 0;
+          } else {
+            walletDeductedDisplay = selectedStudent.balance;
+            debtAmountDisplay = cartTotal - selectedStudent.balance;
+            cashAmountDisplay = 0;
+          }
+        } else if (_paymentMode == AppConstants.paymentMixed) {
+          walletDeductedDisplay = mixedWallet ?? 0.0;
+          cashAmountDisplay = mixedCash ?? 0.0;
+          debtAmountDisplay =
+              cartTotal - (walletDeductedDisplay + cashAmountDisplay);
+          if (debtAmountDisplay < 0) debtAmountDisplay = 0;
+        }
+      }
 
       // Clear cart and student
       ref.read(cartProvider.notifier).clearCart();
@@ -347,10 +409,11 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
             items: cartItems,
             totalAmount: cartTotal,
             paymentMode: _paymentMode,
-            walletDeducted: walletDeducted,
-            cashAmount: cashAmount,
-            debtAmount: debtAmount,
+            walletDeducted: walletDeductedDisplay,
+            cashAmount: cashAmountDisplay,
+            debtAmount: debtAmountDisplay,
             studentName: selectedStudent?.name,
+            transaction: savedTransaction,
           ),
         );
       }
@@ -363,7 +426,43 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
   }
 }
 
-class _PaymentModeChip extends StatelessWidget {
+class _CloseCircle extends StatefulWidget {
+  final VoidCallback onTap;
+  const _CloseCircle({required this.onTap});
+
+  @override
+  State<_CloseCircle> createState() => _CloseCircleState();
+}
+
+class _CloseCircleState extends State<_CloseCircle> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            color: _hovered
+                ? cs.onSurfaceVariant.withValues(alpha: 0.15)
+                : cs.onSurfaceVariant.withValues(alpha: 0.08),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(Icons.close_rounded, size: 16, color: cs.onSurfaceVariant),
+        ),
+      ),
+    );
+  }
+}
+
+class _PaymentModeChip extends StatefulWidget {
   final String label;
   final IconData icon;
   final bool isSelected;
@@ -379,46 +478,60 @@ class _PaymentModeChip extends StatelessWidget {
   });
 
   @override
+  State<_PaymentModeChip> createState() => _PaymentModeChipState();
+}
+
+class _PaymentModeChipState extends State<_PaymentModeChip> {
+  bool _isHovered = false;
+
+  @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final pos = context.pos;
+
     return Expanded(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: enabled ? onTap : null,
-          borderRadius: BorderRadius.circular(10),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        child: GestureDetector(
+          onTap: widget.enabled ? widget.onTap : null,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            padding: const EdgeInsets.symmetric(vertical: 14),
             decoration: BoxDecoration(
-              color: isSelected ? AppColors.primaryContainer : AppColors.surfaceContainer,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: isSelected ? AppColors.primary : AppColors.border,
-                width: isSelected ? 1.5 : 0.5,
-              ),
+              color: widget.isSelected
+                  ? cs.primary.withValues(alpha: 0.1)
+                  : _isHovered && widget.enabled
+                      ? pos.fill
+                      : pos.fillSecondary,
+              borderRadius: BorderRadius.circular(12),
+              border: widget.isSelected
+                  ? Border.all(color: cs.primary, width: 1.5)
+                  : null,
             ),
             child: Column(
               children: [
                 Icon(
-                  icon,
+                  widget.icon,
                   size: 22,
-                  color: !enabled
-                      ? AppColors.onSurfaceVariant.withValues(alpha: 0.3)
-                      : isSelected
-                          ? AppColors.primary
-                          : AppColors.onSurfaceVariant,
+                  color: !widget.enabled
+                      ? cs.onSurfaceVariant.withValues(alpha: 0.2)
+                      : widget.isSelected
+                          ? cs.primary
+                          : cs.onSurfaceVariant,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 Text(
-                  label,
-                  style: TextStyle(
+                  widget.label,
+                  style: GoogleFonts.inter(
                     fontSize: 12,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                    color: !enabled
-                        ? AppColors.onSurfaceVariant.withValues(alpha: 0.3)
-                        : isSelected
-                            ? AppColors.primary
-                            : AppColors.onSurfaceVariant,
+                    fontWeight:
+                        widget.isSelected ? FontWeight.w600 : FontWeight.w500,
+                    color: !widget.enabled
+                        ? cs.onSurfaceVariant.withValues(alpha: 0.2)
+                        : widget.isSelected
+                            ? cs.primary
+                            : cs.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -444,14 +557,15 @@ class _BreakdownRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: color, fontSize: 13)),
+          Text(label, style: GoogleFonts.inter(color: color, fontSize: 13)),
           Text(
             CurrencyFormatter.format(amount),
-            style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600),
+            style: GoogleFonts.inter(
+                color: color, fontSize: 13, fontWeight: FontWeight.w600),
           ),
         ],
       ),

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 
-/// Reusable CG logo widget that renders the logo as a styled monogram
+/// Refined CG logo monogram — Apple-inspired treatment.
 class AppLogo extends StatelessWidget {
   final double size;
   final bool showBackground;
@@ -19,11 +20,11 @@ class AppLogo extends StatelessWidget {
       height: size,
       decoration: showBackground
           ? BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.circular(size * 0.25),
+              color: AppColors.brandPrimary,
+              borderRadius: BorderRadius.circular(size * 0.28),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.3),
+                  color: AppColors.brandPrimary.withValues(alpha: 0.25),
                   blurRadius: 12,
                   offset: const Offset(0, 4),
                 ),
@@ -33,11 +34,10 @@ class AppLogo extends StatelessWidget {
       child: Center(
         child: Text(
           'Cg',
-          style: TextStyle(
-            fontFamily: 'serif',
-            fontSize: size * 0.45,
+          style: GoogleFonts.inter(
+            fontSize: size * 0.42,
             fontWeight: FontWeight.w300,
-            color: AppColors.secondary,
+            color: AppColors.brandSecondary,
             letterSpacing: -1,
             height: 1,
           ),

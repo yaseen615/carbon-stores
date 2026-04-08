@@ -8,6 +8,7 @@ class Product {
   final String category;
   final int sales;
   final DateTime updatedAt;
+  final String? imageId;
 
   const Product({
     required this.id,
@@ -17,6 +18,7 @@ class Product {
     required this.category,
     this.sales = 0,
     required this.updatedAt,
+    this.imageId,
   });
 
   bool get isOutOfStock => stock <= 0;
@@ -31,6 +33,7 @@ class Product {
     String? category,
     int? sales,
     DateTime? updatedAt,
+    String? imageId,
   }) {
     return Product(
       id: id ?? this.id,
@@ -40,6 +43,7 @@ class Product {
       category: category ?? this.category,
       sales: sales ?? this.sales,
       updatedAt: updatedAt ?? this.updatedAt,
+      imageId: imageId ?? this.imageId,
     );
   }
 
@@ -53,6 +57,7 @@ class Product {
       category: data['category'] ?? 'General',
       sales: (data['sales'] ?? 0).toInt(),
       updatedAt: (data['updated_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      imageId: data['imageId'] as String?,
     );
   }
 
@@ -64,6 +69,7 @@ class Product {
       'category': category,
       'sales': sales,
       'updated_at': FieldValue.serverTimestamp(),
+      if (imageId != null) 'imageId': imageId,
     };
   }
 

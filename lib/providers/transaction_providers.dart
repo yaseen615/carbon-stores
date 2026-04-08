@@ -36,3 +36,21 @@ final monthlyTransactionsProvider = StreamProvider<List<StoreTransaction>>((ref)
   final month = ref.watch(selectedMonthProvider);
   return repo.getTransactionsByMonth(month.year, month.month);
 });
+
+// ─── Today's Sales Total ───
+final todaySalesProvider = Provider<double>((ref) {
+  final txns = ref.watch(todayTransactionsProvider);
+  return txns.maybeWhen(
+    data: (list) => list.where((t) => !t.isVoided).fold(0.0, (sum, t) => sum + t.paidAmount),
+    orElse: () => 0.0,
+  );
+});
+
+// ─── Today's Transaction Count ───
+final todayTransactionCountProvider = Provider<int>((ref) {
+  final txns = ref.watch(todayTransactionsProvider);
+  return txns.maybeWhen(
+    data: (list) => list.where((t) => !t.isVoided).length,
+    orElse: () => 0,
+  );
+});

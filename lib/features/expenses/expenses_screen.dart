@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/theme/app_colors.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../core/theme/pos_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../core/constants/app_constants.dart';
@@ -16,9 +17,12 @@ class ExpensesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final expensesAsync = ref.watch(expensesStreamProvider);
     final totalExpenses = ref.watch(totalExpensesProvider);
+    final cs = Theme.of(context).colorScheme;
+    final pos = context.pos;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Padding(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -26,87 +30,137 @@ class ExpensesScreen extends ConsumerWidget {
           Row(
             children: [
               Text('Expenses',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: AppColors.onBackground)),
+                  style: GoogleFonts.inter(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.4)),
               const Spacer(),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: AppColors.errorContainer,
-                  borderRadius: BorderRadius.circular(10),
+                  color: pos.error.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('Total: ', style: TextStyle(color: AppColors.errorLight, fontSize: 13)),
+                    Text('Total ',
+                        style: GoogleFonts.inter(
+                            color: pos.error.withValues(alpha: 0.6), fontSize: 13)),
                     Text(CurrencyFormatter.format(totalExpenses),
-                        style: const TextStyle(color: AppColors.error, fontSize: 15, fontWeight: FontWeight.w700)),
+                        style: GoogleFonts.inter(
+                            color: pos.error,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700)),
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               ElevatedButton.icon(
                 onPressed: () => _showExpenseForm(context),
                 icon: const Icon(Icons.add_rounded, size: 18),
                 label: const Text('Add Expense'),
+                style: ElevatedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 20),
 
-          // Expenses List
+          // Expenses Table
           Expanded(
             child: expensesAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
-              error: (error, _) => Center(child: Text('Error: $error', style: const TextStyle(color: AppColors.error))),
+              loading: () => Center(
+                  child: CircularProgressIndicator(
+                      color: cs.primary, strokeWidth: 2.5)),
+              error: (error, _) => Center(
+                  child:
+                      Text('Error: $error', style: TextStyle(color: pos.error))),
               data: (expenses) {
                 if (expenses.isEmpty) {
                   return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.receipt_long_outlined, size: 64,
-                            color: AppColors.onSurfaceVariant.withValues(alpha: 0.3)),
+                        Icon(Icons.receipt_long_outlined,
+                            size: 56,
+                            color: cs.onSurfaceVariant.withValues(alpha: 0.2)),
                         const SizedBox(height: 16),
-                        const Text('No expenses recorded',
-                            style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 18)),
+                        Text('No expenses recorded',
+                            style: GoogleFonts.inter(
+                                color: cs.onSurfaceVariant, fontSize: 16)),
                       ],
                     ),
                   );
                 }
 
-                return Card(
+                return Container(
+                  decoration: BoxDecoration(
+                    color: cs.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                    border: isDark
+                        ? Border.all(
+                            color: Colors.white.withValues(alpha: 0.06), width: 0.5)
+                        : null,
+                  ),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(16),
                     child: SingleChildScrollView(
                       child: DataTable(
-                        headingRowColor: WidgetStateProperty.all(AppColors.surfaceContainer),
+                        headingRowColor: WidgetStateProperty.all(
+                          isDark
+                              ? Colors.white.withValues(alpha: 0.04)
+                              : Colors.black.withValues(alpha: 0.02),
+                        ),
+                        headingTextStyle: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: cs.onSurfaceVariant,
+                        ),
+                        dataTextStyle:
+                            GoogleFonts.inter(fontSize: 14, color: cs.onSurface),
                         columnSpacing: 32,
-                        columns: const [
-                          DataColumn(label: Text('Product', style: TextStyle(fontWeight: FontWeight.w600))),
-                          DataColumn(label: Text('Quantity', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                          DataColumn(label: Text('Cost/Unit', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                          DataColumn(label: Text('Total', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                          DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.w600))),
-                          DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.w600))),
+                        dividerThickness: 0.5,
+                        columns: [
+                          DataColumn(label: Text('Product', style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12))),
+                          DataColumn(label: Text('Qty', style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12)), numeric: true),
+                          DataColumn(label: Text('Cost/Unit', style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12)), numeric: true),
+                          DataColumn(label: Text('Total', style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12)), numeric: true),
+                          DataColumn(label: Text('Date', style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12))),
+                          DataColumn(label: Text('', style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12))),
                         ],
                         rows: expenses.map((expense) {
                           return DataRow(cells: [
                             DataCell(Text(expense.productName,
-                                style: const TextStyle(fontWeight: FontWeight.w500))),
+                                style: GoogleFonts.inter(
+                                    fontWeight: FontWeight.w500))),
                             DataCell(Text('${expense.quantity}')),
-                            DataCell(Text(CurrencyFormatter.format(expense.cost))),
+                            DataCell(Text(
+                                CurrencyFormatter.format(expense.cost))),
                             DataCell(Text(
                               CurrencyFormatter.format(expense.totalCost),
-                              style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.error),
+                              style: GoogleFonts.inter(
+                                  fontWeight: FontWeight.w600,
+                                  color: pos.error),
                             )),
-                            DataCell(Text(DateFormatter.formatDate(expense.date),
-                                style: const TextStyle(color: AppColors.onSurfaceVariant))),
+                            DataCell(Text(
+                                DateFormatter.formatDate(expense.date),
+                                style: GoogleFonts.inter(
+                                    color: cs.onSurfaceVariant))),
                             DataCell(IconButton(
-                              icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                              color: AppColors.error,
-                              onPressed: () async {
-                                await ExpenseRepository().deleteExpense(expense.id);
-                              },
+                              icon: Icon(Icons.delete_outline_rounded,
+                                  size: 16, color: pos.error),
+                              onPressed: () =>
+                                  _confirmDelete(context, expense.id),
                             )),
                           ]);
                         }).toList(),
@@ -122,31 +176,88 @@ class ExpensesScreen extends ConsumerWidget {
     );
   }
 
+  void _confirmDelete(BuildContext context, String expenseId) {
+    final pos = context.pos;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Delete Expense?',
+            style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+        content: Text('Are you sure you want to delete this expense record?',
+            style: GoogleFonts.inter(fontSize: 14)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await ExpenseRepository().deleteExpense(expenseId);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: pos.error,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showExpenseForm(BuildContext context) {
     final productController = TextEditingController();
     final quantityController = TextEditingController();
     final costController = TextEditingController();
     DateTime selectedDate = DateTime.now();
+    final cs = Theme.of(context).colorScheme;
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) => Dialog(
-          backgroundColor: AppColors.surfaceVariant,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          elevation: 0,
+          backgroundColor: Theme.of(ctx).colorScheme.surface,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
+            constraints: const BoxConstraints(maxWidth: 420),
             child: Padding(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(28),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Add Expense', style: Theme.of(ctx).textTheme.titleLarge),
-                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Text('Add Expense',
+                          style: GoogleFonts.inter(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.4)),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: () => Navigator.pop(ctx),
+                        child: Container(
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: cs.onSurfaceVariant.withValues(alpha: 0.08),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(Icons.close_rounded,
+                              size: 16, color: cs.onSurfaceVariant),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
                   TextField(
                     controller: productController,
-                    decoration: const InputDecoration(labelText: 'Product / Description'),
+                    decoration: const InputDecoration(
+                        labelText: 'Product / Description'),
                   ),
                   const SizedBox(height: 12),
                   Row(
@@ -155,7 +266,8 @@ class ExpensesScreen extends ConsumerWidget {
                         child: TextField(
                           controller: quantityController,
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Quantity'),
+                          decoration:
+                              const InputDecoration(labelText: 'Quantity'),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -163,13 +275,13 @@ class ExpensesScreen extends ConsumerWidget {
                         child: TextField(
                           controller: costController,
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Cost/Unit (₹)', prefixText: '₹ '),
+                          decoration: const InputDecoration(
+                              labelText: 'Cost/Unit (₹)', prefixText: '₹ '),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  // Date Picker
                   InkWell(
                     onTap: () async {
                       final picked = await showDatePicker(
@@ -182,10 +294,12 @@ class ExpensesScreen extends ConsumerWidget {
                         setState(() => selectedDate = picked);
                       }
                     },
+                    borderRadius: BorderRadius.circular(12),
                     child: InputDecorator(
                       decoration: const InputDecoration(
                         labelText: 'Date',
-                        suffixIcon: Icon(Icons.calendar_today_rounded, size: 18),
+                        suffixIcon:
+                            Icon(Icons.calendar_today_rounded, size: 18),
                       ),
                       child: Text(DateFormatter.formatDate(selectedDate)),
                     ),
@@ -193,12 +307,24 @@ class ExpensesScreen extends ConsumerWidget {
                   const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,
+                    height: 50,
                     child: ElevatedButton(
                       onPressed: () async {
                         final product = productController.text.trim();
-                        final quantity = int.tryParse(quantityController.text) ?? 0;
-                        final cost = double.tryParse(costController.text) ?? 0;
-                        if (product.isEmpty || quantity <= 0 || cost <= 0) return;
+                        final quantity =
+                            int.tryParse(quantityController.text) ?? 0;
+                        final cost =
+                            double.tryParse(costController.text) ?? 0;
+                        if (product.isEmpty || quantity <= 0 || cost <= 0) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text(
+                                  'Please fill out all fields with valid values'),
+                              backgroundColor: cs.error,
+                            ),
+                          );
+                          return;
+                        }
 
                         final expense = Expense(
                           id: '',
@@ -211,11 +337,18 @@ class ExpensesScreen extends ConsumerWidget {
                         await ExpenseRepository().addExpense(expense);
                         await AuditRepository().log(
                           action: AppConstants.auditExpense,
-                          description: 'Expense: $product — ${CurrencyFormatter.format(cost * quantity)}',
+                          description:
+                              'Expense: $product — ${CurrencyFormatter.format(cost * quantity)}',
                         );
                         if (ctx.mounted) Navigator.pop(ctx);
                       },
-                      child: const Text('Add Expense'),
+                      style: ElevatedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: Text('Add Expense',
+                          style: GoogleFonts.inter(
+                              fontSize: 16, fontWeight: FontWeight.w600)),
                     ),
                   ),
                 ],

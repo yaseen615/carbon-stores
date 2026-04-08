@@ -16,8 +16,9 @@ final productsStreamProvider = StreamProvider<List<Product>>((ref) {
 // ─── Selected Category ───
 final selectedCategoryProvider = StateProvider<String?>((ref) => null);
 
-// ─── Search Query ───
+// ─── Search Query & View Mode ───
 final productSearchQueryProvider = StateProvider<String>((ref) => '');
+final isProductListViewProvider = StateProvider<bool>((ref) => false);
 
 // ─── Categories (derived from products) ───
 final categoriesProvider = Provider<List<String>>((ref) {
@@ -54,9 +55,11 @@ final filteredProductsProvider = Provider<List<Product>>((ref) {
 
       // Filter by search
       if (searchQuery.isNotEmpty) {
-        filtered = filtered
-            .where((p) => p.name.toLowerCase().contains(searchQuery))
-            .toList();
+        filtered = filtered.where((p) {
+          final nameLower = p.name.toLowerCase();
+          return nameLower.startsWith(searchQuery) ||
+                 nameLower.contains(' $searchQuery');
+        }).toList();
       }
 
       filtered = filtered.toList()..sort((a, b) {

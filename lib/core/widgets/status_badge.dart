@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../theme/pos_colors.dart';
 
 enum BadgeType { success, error, info, warning }
 
-/// Colored status badge for paid/debt/wallet/warning states
+/// Apple HIG-inspired pill-shaped status badge.
+/// Uses opacity-based backgrounds for visual calmness.
 class StatusBadge extends StatelessWidget {
   final String label;
   final BadgeType type;
@@ -21,69 +23,71 @@ class StatusBadge extends StatelessWidget {
   // Convenience constructors
   const StatusBadge.paid({super.key, this.label = 'Paid', this.fontSize = 12})
       : type = BadgeType.success,
-        icon = Icons.check_circle_rounded;
+        icon = null;
 
   const StatusBadge.debt({super.key, required this.label, this.fontSize = 12})
       : type = BadgeType.error,
-        icon = Icons.warning_rounded;
+        icon = null;
 
   const StatusBadge.wallet({super.key, required this.label, this.fontSize = 12})
       : type = BadgeType.info,
-        icon = Icons.account_balance_wallet_rounded;
+        icon = null;
 
   const StatusBadge.lowStock({super.key, this.label = 'Low Stock', this.fontSize = 12})
       : type = BadgeType.warning,
-        icon = Icons.inventory_2_rounded;
+        icon = null;
 
   const StatusBadge.outOfStock({super.key, this.label = 'Out of Stock', this.fontSize = 12})
       : type = BadgeType.error,
-        icon = Icons.remove_shopping_cart_rounded;
+        icon = null;
 
-  Color get _backgroundColor {
+  Color _backgroundColor(POSColors pos) {
     switch (type) {
       case BadgeType.success:
-        return AppColors.successContainer;
+        return pos.success.withValues(alpha: 0.12);
       case BadgeType.error:
-        return AppColors.errorContainer;
+        return pos.error.withValues(alpha: 0.12);
       case BadgeType.info:
-        return AppColors.infoContainer;
+        return pos.info.withValues(alpha: 0.12);
       case BadgeType.warning:
-        return AppColors.warningContainer;
+        return pos.warning.withValues(alpha: 0.12);
     }
   }
 
-  Color get _foregroundColor {
+  Color _foregroundColor(POSColors pos) {
     switch (type) {
       case BadgeType.success:
-        return AppColors.successLight;
+        return pos.success;
       case BadgeType.error:
-        return AppColors.errorLight;
+        return pos.error;
       case BadgeType.info:
-        return AppColors.infoLight;
+        return pos.info;
       case BadgeType.warning:
-        return AppColors.warning;
+        return pos.warning;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final pos = context.pos;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: _backgroundColor,
-        borderRadius: BorderRadius.circular(8),
+        color: _backgroundColor(pos),
+        borderRadius: BorderRadius.circular(999), // Full pill
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: fontSize + 2, color: _foregroundColor),
+            Icon(icon, size: fontSize + 2, color: _foregroundColor(pos)),
             const SizedBox(width: 4),
           ],
           Text(
             label,
-            style: TextStyle(
-              color: _foregroundColor,
+            style: GoogleFonts.inter(
+              color: _foregroundColor(pos),
               fontSize: fontSize,
               fontWeight: FontWeight.w600,
             ),

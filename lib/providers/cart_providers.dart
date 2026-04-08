@@ -28,6 +28,7 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
           name: product.name,
           price: product.price,
           quantity: 1,
+          imageId: product.imageId,
         ),
       ];
     }

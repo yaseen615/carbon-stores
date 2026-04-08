@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../theme/pos_colors.dart';
 
-/// Reusable search field with instant filtering capability
+/// Apple HIG-style search bar — borderless, filled, rounded.
 class SearchField extends StatelessWidget {
   final String hintText;
   final ValueChanged<String> onChanged;
@@ -20,17 +21,28 @@ class SearchField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final pos = context.pos;
+
     return TextField(
       controller: controller,
       autofocus: autofocus,
       onChanged: onChanged,
-      style: const TextStyle(color: AppColors.onSurface, fontSize: 15),
+      style: GoogleFonts.inter(color: cs.onSurface, fontSize: 15),
       decoration: InputDecoration(
         hintText: hintText,
-        prefixIcon: const Icon(Icons.search_rounded, color: AppColors.onSurfaceVariant, size: 22),
+        hintStyle: GoogleFonts.inter(
+          color: pos.labelTertiary,
+          fontSize: 15,
+        ),
+        prefixIcon: Icon(
+          Icons.search_rounded,
+          color: pos.labelTertiary,
+          size: 20,
+        ),
         suffixIcon: controller != null && controller!.text.isNotEmpty
             ? IconButton(
-                icon: const Icon(Icons.close_rounded, size: 20),
+                icon: Icon(Icons.close_rounded, size: 18, color: pos.labelSecondary),
                 onPressed: () {
                   controller?.clear();
                   onChanged('');
@@ -40,18 +52,18 @@ class SearchField extends StatelessWidget {
             : null,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         filled: true,
-        fillColor: AppColors.surfaceContainer,
+        fillColor: pos.fill,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.border, width: 0.5),
+          borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+          borderSide: BorderSide(color: cs.primary, width: 2),
         ),
       ),
     );

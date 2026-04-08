@@ -1,68 +1,98 @@
 import 'package:flutter/material.dart';
 
-/// CarbonGurukulam brand colors derived from the CG logo
-/// Logo: cream "Cg" monogram on warm brown background
+/// Apple Human Interface Guidelines — Inspired Color System
+/// Dual adaptive palette: Light & Dark are independently designed.
+/// Dark mode is NOT inverted light — it's a separate intentional design.
 class AppColors {
   AppColors._();
 
-  // ─── Brand Primary (Warm Brown from logo) ───
-  static const Color primary = Color(0xFFA0722B);
-  static const Color primaryLight = Color(0xFFD4A76A);
-  static const Color primaryDark = Color(0xFF7A5520);
-  static const Color primaryContainer = Color(0xFF2E2117);
+  // ─── Brand Colors (Constant across themes) ───
+  static const Color brandPrimary = Color(0xFFA0722B);
+  static const Color brandSecondary = Color(0xFFF5E6C8);
 
-  // ─── Brand Secondary (Cream from logo text) ───
-  static const Color secondary = Color(0xFFF5E6C8);
-  static const Color secondaryLight = Color(0xFFFFF8ED);
-  static const Color secondaryDark = Color(0xFFD4C4A0);
+  // ═══════════════════════════════════════════════════════════════
+  //  LIGHT THEME PALETTE
+  // ═══════════════════════════════════════════════════════════════
 
-  // ─── Surfaces (Dark Theme) ───
-  static const Color background = Color(0xFF121010);
-  static const Color surface = Color(0xFF1A1614);
-  static const Color surfaceVariant = Color(0xFF231F1B);
-  static const Color surfaceContainer = Color(0xFF2A2420);
-  static const Color surfaceContainerHigh = Color(0xFF342D28);
-  static const Color surfaceBright = Color(0xFF3E3630);
+  // Backgrounds
+  static const Color lightBackground = Color(0xFFF4F5F7);
+  static const Color lightSurface = Color(0xFFFFFFFF);
+  static const Color lightElevatedSurface = Color(0xFFFFFFFF);
+  static const Color lightGroupedBackground = Color(0xFFF4F5F7);
 
-  // ─── Text ───
-  static const Color onBackground = Color(0xFFF5E6C8);
-  static const Color onSurface = Color(0xFFEDE0D0);
-  static const Color onSurfaceVariant = Color(0xFFB5A898);
-  static const Color onPrimary = Color(0xFFFFF8ED);
-  static const Color onSecondary = Color(0xFF2E2117);
+  // Primary
+  static const Color lightPrimary = Color(0xFF1E58FF);
+  static const Color lightPrimaryContainer = Color(0xFFE5F1FF);
 
-  // ─── Semantic Colors ───
-  static const Color success = Color(0xFF4CAF50);       // Green → Paid
-  static const Color successLight = Color(0xFF81C784);
-  static const Color successContainer = Color(0xFF1B3A1B);
+  // Labels (Text)
+  static const Color lightLabelPrimary = Color(0xFF1D1D1F);
+  static const Color lightLabelSecondary = Color(0xFF6E6E73);
+  static const Color lightLabelTertiary = Color(0xFFAEAEB2);
+  static const Color lightLabelQuaternary = Color(0xFFC7C7CC);
 
-  static const Color error = Color(0xFFEF5350);         // Red → Debt
-  static const Color errorLight = Color(0xFFE57373);
-  static const Color errorContainer = Color(0xFF3A1B1B);
+  // Fills
+  static const Color lightFill = Color(0x14787880);         // 8% opacity
+  static const Color lightFillSecondary = Color(0x0A787880); // 4% opacity
+  static const Color lightFillTertiary = Color(0x1F787880);  // 12% opacity
 
-  static const Color info = Color(0xFF42A5F5);           // Blue → Wallet
-  static const Color infoLight = Color(0xFF64B5F6);
-  static const Color infoContainer = Color(0xFF1B2A3A);
+  // Separator
+  static const Color lightSeparator = Color(0x1F3C3C43);     // 12% opacity
+  static const Color lightSeparatorOpaque = Color(0xFFC6C6C8);
 
-  static const Color warning = Color(0xFFFFB74D);        // Orange → Low stock
-  static const Color warningContainer = Color(0xFF3A2E1B);
+  // ═══════════════════════════════════════════════════════════════
+  //  DARK THEME PALETTE
+  // ═══════════════════════════════════════════════════════════════
 
-  // ─── Borders & Dividers ───
-  static const Color border = Color(0xFF3E3630);
-  static const Color divider = Color(0xFF2A2420);
+  // Backgrounds
+  static const Color darkBackground = Color(0xFF000000);
+  static const Color darkSurface = Color(0xFF1C1C1E);
+  static const Color darkElevatedSurface = Color(0xFF2C2C2E);
+  static const Color darkGroupedBackground = Color(0xFF1C1C1E);
 
-  // ─── Shadows ───
-  static const Color shadow = Color(0x40000000);
+  // Primary
+  static const Color darkPrimary = Color(0xFF0A84FF);
+  static const Color darkPrimaryContainer = Color(0xFF003A70);
 
-  // ─── Category Colors ───
+  // Labels (Text)
+  static const Color darkLabelPrimary = Color(0xFFFFFFFF);
+  static const Color darkLabelSecondary = Color(0xFF8E8E93);
+  static const Color darkLabelTertiary = Color(0xFF48484A);
+  static const Color darkLabelQuaternary = Color(0xFF3A3A3C);
+
+  // Fills
+  static const Color darkFill = Color(0x5C787880);           // 36% opacity
+  static const Color darkFillSecondary = Color(0x52787880);   // 32% opacity
+  static const Color darkFillTertiary = Color(0x3D787880);    // 24% opacity
+
+  // Separator
+  static const Color darkSeparator = Color(0xA6545458);       // 65% opacity
+  static const Color darkSeparatorOpaque = Color(0xFF38383A);
+
+  // ═══════════════════════════════════════════════════════════════
+  //  SEMANTIC COLORS (Adaptive — used via POSColors)
+  // ═══════════════════════════════════════════════════════════════
+
+  // Apple System Colors — Light
+  static const Color lightSuccess = Color(0xFF34C759);
+  static const Color lightError = Color(0xFFFF3B30);
+  static const Color lightWarning = Color(0xFFFF9500);
+  static const Color lightInfo = Color(0xFF5856D6);
+
+  // Apple System Colors — Dark
+  static const Color darkSuccess = Color(0xFF30D158);
+  static const Color darkError = Color(0xFFFF453A);
+  static const Color darkWarning = Color(0xFFFF9F0A);
+  static const Color darkInfo = Color(0xFF5E5CE6);
+
+  // ─── Category Colors (Muted, works on both themes) ───
   static const List<Color> categoryColors = [
-    Color(0xFFA0722B),  // Brown
-    Color(0xFF5C8A4D),  // Green
-    Color(0xFF4A7A8C),  // Teal
-    Color(0xFF8C6B4A),  // Warm Brown
-    Color(0xFF6B5A8C),  // Purple
-    Color(0xFF8C4A5A),  // Rose
-    Color(0xFF4A6B8C),  // Steel Blue
-    Color(0xFF8C8A4A),  // Olive
+    Color(0xFF007AFF), // Blue
+    Color(0xFF34C759), // Green
+    Color(0xFFFF9500), // Orange
+    Color(0xFF5856D6), // Indigo
+    Color(0xFFFF2D55), // Pink
+    Color(0xFFAF52DE), // Purple
+    Color(0xFF00C7BE), // Teal
+    Color(0xFFFF9500), // Orange variant
   ];
 }

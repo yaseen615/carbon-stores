@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/theme/app_colors.dart';
 import '../../../providers/product_providers.dart';
+
 import 'product_tile.dart';
 
 class ProductGrid extends ConsumerWidget {
@@ -9,57 +9,34 @@ class ProductGrid extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final products = ref.watch(filteredProductsProvider);
     final productsAsync = ref.watch(productsStreamProvider);
+    final filtered = ref.watch(filteredProductsProvider);
+    final cs = Theme.of(context).colorScheme;
 
     return productsAsync.when(
-      loading: () => const Center(
-        child: CircularProgressIndicator(color: AppColors.primary),
+      loading: () => Center(
+        child: CircularProgressIndicator(color: cs.primary, strokeWidth: 2.5),
       ),
       error: (error, _) => Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline_rounded, size: 48, color: AppColors.error),
-            const SizedBox(height: 12),
-            Text(
-              'Error loading products',
-              style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 16),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              error.toString(),
-              style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12),
-            ),
-          ],
-        ),
+        child: Text('Error: $error', style: TextStyle(color: cs.error)),
       ),
       data: (_) {
-        if (products.isEmpty) {
+        if (filtered.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  Icons.shopping_bag_outlined,
-                  size: 64,
-                  color: AppColors.onSurfaceVariant.withValues(alpha: 0.3),
+                  Icons.inventory_2_outlined,
+                  size: 56,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.2),
                 ),
                 const SizedBox(height: 16),
                 Text(
                   'No products found',
                   style: TextStyle(
-                    color: AppColors.onSurfaceVariant,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Add products from the Inventory tab',
-                  style: TextStyle(
-                    color: AppColors.onSurfaceVariant.withValues(alpha: 0.6),
-                    fontSize: 14,
+                    color: cs.onSurfaceVariant,
+                    fontSize: 16,
                   ),
                 ),
               ],
@@ -67,20 +44,34 @@ class ProductGrid extends ConsumerWidget {
           );
         }
 
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: GridView.builder(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 4,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              childAspectRatio: 1.3,
-            ),
-            itemCount: products.length,
+        final isListView = ref.watch(isProductListViewProvider);
+
+        if (isListView) {
+          return ListView.separated(
+            padding: const EdgeInsets.only(bottom: 24),
+            itemCount: filtered.length,
+            separatorBuilder: (context, index) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
-              return ProductTile(product: products[index]);
+              return SizedBox(
+                height: 110, // Fixed height for list item
+                child: ProductTile(product: filtered[index], isListView: true),
+              );
             },
+          );
+        }
+
+        return GridView.builder(
+          padding: const EdgeInsets.only(bottom: 24),
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 180,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            childAspectRatio: 0.8, // Decreased to clear 2.9px vertical overflow of product text
           ),
+          itemCount: filtered.length,
+          itemBuilder: (context, index) {
+            return ProductTile(product: filtered[index]);
+          },
         );
       },
     );

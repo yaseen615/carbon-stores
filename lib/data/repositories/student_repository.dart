@@ -2,6 +2,34 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/student_model.dart';
 import '../../core/constants/app_constants.dart';
 
+/// Holds aggregate stats computed via Firestore AggregateQuery (1 read).
+class StudentStats {
+  final double totalBalance;
+  final double totalDebt;
+  final int count;
+
+  const StudentStats({
+    required this.totalBalance,
+    required this.totalDebt,
+    required this.count,
+  });
+
+  static const empty = StudentStats(totalBalance: 0, totalDebt: 0, count: 0);
+}
+
+/// Holds a page of students with cursor for the next page.
+class StudentPage {
+  final List<Student> students;
+  final DocumentSnapshot? lastDocument; // cursor for startAfter
+  final bool hasMore;
+
+  const StudentPage({
+    required this.students,
+    required this.lastDocument,
+    required this.hasMore,
+  });
+}
+
 class StudentRepository {
   final FirebaseFirestore _firestore;
   final CollectionReference _collection;
@@ -11,12 +39,85 @@ class StudentRepository {
         _collection = (firestore ?? FirebaseFirestore.instance)
             .collection(AppConstants.studentsCollection);
 
-  /// Stream all students ordered by name
-  Stream<List<Student>> getStudents() {
-    return _collection
-        .orderBy('name')
-        .snapshots()
-        .map((snapshot) => snapshot.docs.map(Student.fromFirestore).toList());
+  // ──────────────────────────────────────────────────────────
+  //  PAGINATED QUERIES (9–12 docs per page instead of ALL)
+  // ──────────────────────────────────────────────────────────
+
+  /// Fetch a single page of students, ordered by name.
+  ///
+  /// [limit]      — how many to fetch (default 12)
+  /// [startAfter] — cursor from the previous page's [lastDocument]
+  ///
+  /// Cost: [limit] reads.
+  Future<StudentPage> getStudentsPaginated({
+    int limit = 12,
+    DocumentSnapshot? startAfter,
+  }) async {
+    Query query = _collection.orderBy('name').limit(limit + 1); // +1 to detect hasMore
+
+    if (startAfter != null) {
+      query = query.startAfterDocument(startAfter);
+    }
+
+    final snapshot = await query.get();
+    final docs = snapshot.docs;
+    final hasMore = docs.length > limit;
+    final pageDocs = hasMore ? docs.sublist(0, limit) : docs;
+
+    return StudentPage(
+      students: pageDocs.map(Student.fromFirestore).toList(),
+      lastDocument: pageDocs.isNotEmpty ? pageDocs.last : null,
+      hasMore: hasMore,
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────
+  //  AGGREGATE QUERIES (1 read instead of N)
+  // ──────────────────────────────────────────────────────────
+
+  /// Get total balance, total debt, and student count using
+  /// Firestore's AggregateQuery. Costs 1 document read.
+  Future<StudentStats> getStudentStats() async {
+    try {
+      final aggregation = await _collection.aggregate(
+        sum('balance'),
+        sum('debt'),
+        count(),
+      ).get();
+
+      return StudentStats(
+        totalBalance: (aggregation.getSum('balance') ?? 0).toDouble(),
+        totalDebt: (aggregation.getSum('debt') ?? 0).toDouble(),
+        count: aggregation.count ?? 0,
+      );
+    } catch (_) {
+      // Fallback if aggregate not supported (very old SDK)
+      return StudentStats.empty;
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────
+  //  TARGETED READS (for search results & individual students)
+  // ──────────────────────────────────────────────────────────
+
+  /// Fetch specific students by their IDs (document IDs).
+  /// Cost: [ids.length] reads — typically 5–12 for search results.
+  Future<List<Student>> getStudentsByIds(List<String> ids) async {
+    if (ids.isEmpty) return [];
+
+    // Firestore 'whereIn' supports max 30 values per query
+    final results = <Student>[];
+    for (int i = 0; i < ids.length; i += 30) {
+      final chunk = ids.sublist(
+        i,
+        i + 30 > ids.length ? ids.length : i + 30,
+      );
+      final snapshot = await _collection
+          .where(FieldPath.documentId, whereIn: chunk)
+          .get();
+      results.addAll(snapshot.docs.map(Student.fromFirestore));
+    }
+    return results;
   }
 
   /// Get a single student by admission number
@@ -25,6 +126,30 @@ class StudentRepository {
     if (!doc.exists) return null;
     return Student.fromFirestore(doc);
   }
+
+  // ──────────────────────────────────────────────────────────
+  //  FULL COLLECTION (only for CSV export — on-demand)
+  // ──────────────────────────────────────────────────────────
+
+  /// Stream all students ordered by name.
+  /// ⚠️  Use ONLY for CSV export. Costs N reads.
+  Stream<List<Student>> getStudents() {
+    return _collection
+        .orderBy('name')
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map(Student.fromFirestore).toList());
+  }
+
+  /// One-time fetch of all students (for CSV export).
+  /// Use instead of the stream when you just need current data.
+  Future<List<Student>> getAllStudentsForExport() async {
+    final snapshot = await _collection.orderBy('name').get();
+    return snapshot.docs.map(Student.fromFirestore).toList();
+  }
+
+  // ──────────────────────────────────────────────────────────
+  //  WRITE OPERATIONS (unchanged — existing logic preserved)
+  // ──────────────────────────────────────────────────────────
 
   /// Add a new student (using admission number as doc ID)
   Future<void> addStudent(Student student) async {

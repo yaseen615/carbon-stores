@@ -3,12 +3,14 @@ class CartItem {
   final String name;
   final double price;
   final int quantity;
+  final String? imageId;
 
   const CartItem({
     required this.productId,
     required this.name,
     required this.price,
     required this.quantity,
+    this.imageId,
   });
 
   double get total => price * quantity;
@@ -18,12 +20,14 @@ class CartItem {
     String? name,
     double? price,
     int? quantity,
+    String? imageId,
   }) {
     return CartItem(
       productId: productId ?? this.productId,
       name: name ?? this.name,
       price: price ?? this.price,
       quantity: quantity ?? this.quantity,
+      imageId: imageId ?? this.imageId,
     );
   }
 
@@ -33,6 +37,7 @@ class CartItem {
       'name': name,
       'price': price,
       'qty': quantity,
+      'imageId': imageId,
     };
   }
 
@@ -42,6 +47,7 @@ class CartItem {
       name: map['name'] ?? '',
       price: (map['price'] ?? 0).toDouble(),
       quantity: (map['qty'] ?? 0).toInt(),
+      imageId: map['imageId'] as String?,
     );
   }
 
