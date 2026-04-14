@@ -2,9 +2,9 @@
     package="com.example.carbonstores">
 
     <application
-        android:label="carbon_stores"
+        android:label="Carbon Stores"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/launcher_icon">
 
         <activity
             android:name=".MainActivity"

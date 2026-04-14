@@ -22,6 +22,7 @@ class StudentsScreen extends ConsumerStatefulWidget {
 
 class _StudentsScreenState extends ConsumerState<StudentsScreen> {
   bool _isSyncing = false;
+  bool _isRefreshing = false;
   final ScrollController _scrollController = ScrollController();
   String _searchQuery = '';
 
@@ -62,7 +63,9 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
 
     // ─── Step 2: Show progress dialog ───
     final progressNotifier = ValueNotifier<double>(0.0);
-    final statusNotifier = ValueNotifier<String>('Fetching students from server...');
+    final statusNotifier = ValueNotifier<String>(
+      'Fetching students from server...',
+    );
 
     if (!mounted) return;
     showDialog(
@@ -132,9 +135,9 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
           icon: Icons.check_circle_outline_rounded,
           message: result.newlyAdded > 0
               ? 'Students synced successfully! '
-                  '${result.newlyAdded} new, ${result.alreadyExisted} existing'
+                    '${result.newlyAdded} new, ${result.alreadyExisted} existing'
               : 'All students are already up to date '
-                  '(${result.alreadyExisted} found)',
+                    '(${result.alreadyExisted} found)',
           isError: false,
         );
       }
@@ -213,14 +216,19 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
                           onPressed: () => Navigator.pop(ctx, false),
                           style: OutlinedButton.styleFrom(
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                             side: BorderSide(
-                                color: cs.onSurfaceVariant.withValues(alpha: 0.2)),
+                              color: cs.onSurfaceVariant.withValues(alpha: 0.2),
+                            ),
                           ),
-                          child: Text('Cancel',
-                              style: GoogleFonts.inter(
-                                  fontWeight: FontWeight.w600,
-                                  color: cs.onSurfaceVariant)),
+                          child: Text(
+                            'Cancel',
+                            style: GoogleFonts.inter(
+                              fontWeight: FontWeight.w600,
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -235,11 +243,15 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
                             foregroundColor: Colors.white,
                             elevation: 0,
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
-                          child: Text('Sync Now',
-                              style: GoogleFonts.inter(
-                                  fontWeight: FontWeight.w600)),
+                          child: Text(
+                            'Sync Now',
+                            style: GoogleFonts.inter(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -298,6 +310,17 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
     );
   }
 
+  Future<void> _onRefresh() async {
+    if (_isRefreshing) return;
+    setState(() => _isRefreshing = true);
+    try {
+      ref.read(paginatedStudentsProvider.notifier).refresh();
+      ref.invalidate(studentStatsProvider);
+    } finally {
+      if (mounted) setState(() => _isRefreshing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final paginatedState = ref.watch(paginatedStudentsProvider);
@@ -307,85 +330,95 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
     final cs = Theme.of(context).colorScheme;
     final pos = context.pos;
 
-    // Decide which students to show: search results or paginated list
     final isSearching = _searchQuery.isNotEmpty;
+    final screenWidth = MediaQuery.of(context).size.width;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ─── Header ───
-          Row(
-            children: [
-              Text(
-                'Students',
-                style: GoogleFonts.inter(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                  color: cs.onSurface,
-                  letterSpacing: -0.4,
+    return SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ─── Header ───
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  'Students',
+                  style: GoogleFonts.inter(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w700,
+                    color: cs.onSurface,
+                    letterSpacing: -0.4,
+                  ),
                 ),
-              ),
-              const Spacer(),
-              _StatChip(
-                label: 'Balance',
-                value: CurrencyFormatter.formatCompact(totalBalance),
-                color: pos.info,
-              ),
-              const SizedBox(width: 8),
-              _StatChip(
-                label: 'Debt',
-                value: CurrencyFormatter.formatCompact(totalDebt),
-                color: pos.error,
-              ),
-              const SizedBox(width: 16),
-
-              // ─── Sync Students Button ───
-              _SyncButton(
-                isSyncing: _isSyncing,
-                onPressed: _syncStudents,
-              ),
-              const SizedBox(width: 8),
-
-              ElevatedButton.icon(
-                onPressed: () => _showAddStudentDialog(context),
-                icon: const Icon(Icons.person_add_rounded, size: 18),
-                label: const Text('Add Student'),
-                style: ElevatedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                if (screenWidth > 600) const SizedBox(width: 8),
+                _StatChip(
+                  label: 'Balance',
+                  value: CurrencyFormatter.formatCompact(totalBalance),
+                  color: pos.info,
                 ),
+                _StatChip(
+                  label: 'Debt',
+                  value: CurrencyFormatter.formatCompact(totalDebt),
+                  color: pos.error,
+                ),
+                _SyncButton(isSyncing: _isSyncing, onPressed: _syncStudents),
+                ElevatedButton.icon(
+                  onPressed: () => _showAddStudentDialog(context),
+                  icon: const Icon(Icons.person_add_rounded, size: 18),
+                  label: const Text('Add Student'),
+                  style: ElevatedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Search + Refresh
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 500),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: SearchField(
+                      hintText: 'Search by name or ID...',
+                      onChanged: (query) {
+                        setState(() => _searchQuery = query);
+                        ref.read(studentSearchQueryProvider.notifier).state =
+                            query;
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  _AppleRefreshButton(
+                    onPressed: _onRefresh,
+                    isRefreshing: _isRefreshing,
+                  ),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Search
-          SizedBox(
-            width: 320,
-            child: SearchField(
-              hintText: 'Search by name or ID...',
-              onChanged: (query) {
-                setState(() => _searchQuery = query);
-                ref.read(studentSearchQueryProvider.notifier).state = query;
-              },
             ),
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
 
-          // ─── Students Grid ───
-          Expanded(
-            child: _buildStudentGrid(
-              context: context,
-              isSearching: isSearching,
-              paginatedState: paginatedState,
-              searchResults: searchResults,
-              cs: cs,
-              pos: pos,
+            // ─── Students Grid ───
+            Expanded(
+              child: _buildStudentGrid(
+                context: context,
+                isSearching: isSearching,
+                paginatedState: paginatedState,
+                searchResults: searchResults,
+                cs: cs,
+                pos: pos,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -398,6 +431,9 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
     required ColorScheme cs,
     required POSColors pos,
   }) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final crossAxisCount = screenWidth > 1100 ? 3 : screenWidth > 700 ? 2 : 1;
+
     // ─── Search Mode ───
     if (isSearching) {
       return searchResults.when(
@@ -413,27 +449,36 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.search_off_rounded,
-                      size: 56,
-                      color: cs.onSurfaceVariant.withValues(alpha: 0.2)),
+                  Icon(
+                    Icons.search_off_rounded,
+                    size: 56,
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.2),
+                  ),
                   const SizedBox(height: 16),
-                  Text('No students found',
-                      style: GoogleFonts.inter(
-                          color: cs.onSurfaceVariant, fontSize: 16)),
+                  Text(
+                    'No students found',
+                    style: GoogleFonts.inter(
+                      color: cs.onSurfaceVariant,
+                      fontSize: 16,
+                    ),
+                  ),
                 ],
               ),
             );
           }
           return GridView.builder(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
-              childAspectRatio: 2.0,
+              mainAxisExtent: 130,
             ),
             itemCount: students.length,
             itemBuilder: (context, index) {
-              return _StudentCard(student: students[index]);
+              return _StudentCard(
+                student: students[index],
+                onRechargeSuccess: _onRefresh,
+              );
             },
           );
         },
@@ -449,8 +494,10 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
 
     if (paginatedState.error != null) {
       return Center(
-        child: Text('Error: ${paginatedState.error}',
-            style: TextStyle(color: pos.error)),
+        child: Text(
+          'Error: ${paginatedState.error}',
+          style: TextStyle(color: pos.error),
+        ),
       );
     }
 
@@ -459,13 +506,19 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.school_outlined,
-                size: 56,
-                color: cs.onSurfaceVariant.withValues(alpha: 0.2)),
+            Icon(
+              Icons.school_outlined,
+              size: 56,
+              color: cs.onSurfaceVariant.withValues(alpha: 0.2),
+            ),
             const SizedBox(height: 16),
-            Text('No students found',
-                style: GoogleFonts.inter(
-                    color: cs.onSurfaceVariant, fontSize: 16)),
+            Text(
+              'No students found',
+              style: GoogleFonts.inter(
+                color: cs.onSurfaceVariant,
+                fontSize: 16,
+              ),
+            ),
           ],
         ),
       );
@@ -477,11 +530,11 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
 
     return GridView.builder(
       controller: _scrollController,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: 2.0,
+        mainAxisExtent: 130,
       ),
       itemCount: itemCount,
       itemBuilder: (context, index) {
@@ -495,13 +548,18 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
                       width: 24,
                       height: 24,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: cs.primary),
+                        strokeWidth: 2,
+                        color: cs.primary,
+                      ),
                     )
                   : const SizedBox.shrink(),
             ),
           );
         }
-        return _StudentCard(student: students[index]);
+        return _StudentCard(
+          student: students[index],
+          onRechargeSuccess: _onRefresh,
+        );
       },
     );
   }
@@ -529,11 +587,14 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
               children: [
                 Row(
                   children: [
-                    Text('Add Student',
-                        style: GoogleFonts.inter(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.4)),
+                    Text(
+                      'Add Student',
+                      style: GoogleFonts.inter(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.4,
+                      ),
+                    ),
                     const Spacer(),
                     GestureDetector(
                       onTap: () => Navigator.pop(ctx),
@@ -544,8 +605,11 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
                           color: cs.onSurfaceVariant.withValues(alpha: 0.08),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(Icons.close_rounded,
-                            size: 16, color: cs.onSurfaceVariant),
+                        child: Icon(
+                          Icons.close_rounded,
+                          size: 16,
+                          color: cs.onSurfaceVariant,
+                        ),
                       ),
                     ),
                   ],
@@ -553,8 +617,9 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
                 const SizedBox(height: 24),
                 TextField(
                   controller: idController,
-                  decoration:
-                      const InputDecoration(labelText: 'Admission Number'),
+                  decoration: const InputDecoration(
+                    labelText: 'Admission Number',
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -565,8 +630,9 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
                 TextField(
                   controller: balanceController,
                   keyboardType: TextInputType.number,
-                  decoration:
-                      const InputDecoration(labelText: 'Initial Balance (₹)'),
+                  decoration: const InputDecoration(
+                    labelText: 'Initial Balance (₹)',
+                  ),
                 ),
                 const SizedBox(height: 24),
                 SizedBox(
@@ -581,8 +647,7 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
                       final student = Student(
                         id: idController.text.trim(),
                         name: nameController.text.trim(),
-                        balance:
-                            double.tryParse(balanceController.text) ?? 0,
+                        balance: double.tryParse(balanceController.text) ?? 0,
                         debt: 0,
                         updatedAt: DateTime.now(),
                       );
@@ -595,10 +660,12 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
                         );
                         // Update local search index
                         final index = ref.read(studentSearchIndexProvider);
-                        await index.addEntry(StudentIndexEntry(
-                          studentId: student.id,
-                          name: student.name,
-                        ));
+                        await index.addEntry(
+                          StudentIndexEntry(
+                            studentId: student.id,
+                            name: student.name,
+                          ),
+                        );
                         // Refresh paginated list & stats
                         ref.read(paginatedStudentsProvider.notifier).refresh();
                         ref.invalidate(studentStatsProvider);
@@ -607,9 +674,9 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
                         if (ctx.mounted) {
                           ScaffoldMessenger.of(ctx).showSnackBar(
                             SnackBar(
-                              content: Text(e
-                                  .toString()
-                                  .replaceAll('Exception: ', '')),
+                              content: Text(
+                                e.toString().replaceAll('Exception: ', ''),
+                              ),
                               backgroundColor: pos.error,
                             ),
                           );
@@ -618,11 +685,16 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
                     },
                     style: ElevatedButton.styleFrom(
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                     ),
-                    child: Text('Add Student',
-                        style: GoogleFonts.inter(
-                            fontSize: 16, fontWeight: FontWeight.w600)),
+                    child: Text(
+                      'Add Student',
+                      style: GoogleFonts.inter(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -639,10 +711,7 @@ class _SyncButton extends StatelessWidget {
   final bool isSyncing;
   final VoidCallback onPressed;
 
-  const _SyncButton({
-    required this.isSyncing,
-    required this.onPressed,
-  });
+  const _SyncButton({required this.isSyncing, required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
@@ -701,10 +770,7 @@ class _SyncProgressDialog extends StatelessWidget {
   final ValueNotifier<double> progress;
   final ValueNotifier<String> status;
 
-  const _SyncProgressDialog({
-    required this.progress,
-    required this.status,
-  });
+  const _SyncProgressDialog({required this.progress, required this.status});
 
   @override
   Widget build(BuildContext context) {
@@ -739,10 +805,8 @@ class _SyncProgressDialog extends StatelessWidget {
                           child: CircularProgressIndicator(
                             value: value > 0 ? value : null,
                             strokeWidth: 6,
-                            backgroundColor:
-                                pos.info.withValues(alpha: 0.12),
-                            valueColor:
-                                AlwaysStoppedAnimation(pos.info),
+                            backgroundColor: pos.info.withValues(alpha: 0.12),
+                            valueColor: AlwaysStoppedAnimation(pos.info),
                             strokeCap: StrokeCap.round,
                           ),
                         ),
@@ -756,8 +820,7 @@ class _SyncProgressDialog extends StatelessWidget {
                             ),
                           )
                         else
-                          Icon(Icons.sync_rounded,
-                              color: pos.info, size: 28),
+                          Icon(Icons.sync_rounded, color: pos.info, size: 28),
                       ],
                     ),
                   );
@@ -815,8 +878,12 @@ class _SyncProgressDialog extends StatelessWidget {
 
 class _StudentCard extends StatefulWidget {
   final Student student;
+  final VoidCallback onRechargeSuccess;
 
-  const _StudentCard({required this.student});
+  const _StudentCard({
+    required this.student,
+    required this.onRechargeSuccess,
+  });
 
   @override
   State<_StudentCard> createState() => _StudentCardState();
@@ -831,9 +898,13 @@ class _StudentCardState extends State<_StudentCard>
   void initState() {
     super.initState();
     _scaleCtrl = AnimationController(
-        duration: const Duration(milliseconds: 150), vsync: this);
-    _scale = Tween<double>(begin: 1.0, end: 0.97)
-        .animate(CurvedAnimation(parent: _scaleCtrl, curve: Curves.easeInOut));
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+    _scale = Tween<double>(
+      begin: 1.0,
+      end: 0.97,
+    ).animate(CurvedAnimation(parent: _scaleCtrl, curve: Curves.easeInOut));
   }
 
   @override
@@ -854,8 +925,7 @@ class _StudentCardState extends State<_StudentCard>
         _scaleCtrl.reverse();
         showDialog(
           context: context,
-          builder: (ctx) =>
-              StudentDetailDialog(student: widget.student),
+          builder: (ctx) => StudentDetailDialog(student: widget.student),
         );
       },
       onTapCancel: () => _scaleCtrl.reverse(),
@@ -877,7 +947,9 @@ class _StudentCardState extends State<_StudentCard>
             ],
             border: isDark
                 ? Border.all(
-                    color: Colors.white.withValues(alpha: 0.06), width: 0.5)
+                    color: Colors.white.withValues(alpha: 0.06),
+                    width: 0.5,
+                  )
                 : null,
           ),
           child: Column(
@@ -939,7 +1011,9 @@ class _StudentCardState extends State<_StudentCard>
                   // Balance pill
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: pos.info.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(999),
@@ -957,7 +1031,9 @@ class _StudentCardState extends State<_StudentCard>
                     const SizedBox(width: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: pos.error.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(999),
@@ -978,14 +1054,20 @@ class _StudentCardState extends State<_StudentCard>
                     child: TextButton.icon(
                       onPressed: () =>
                           _showRechargeDialog(context, widget.student),
-                      icon: Icon(Icons.add_circle_outline_rounded,
-                          size: 14, color: cs.primary),
-                      label: Text('Recharge',
-                          style: GoogleFonts.inter(
-                              fontSize: 12, color: cs.primary)),
+                      icon: Icon(
+                        Icons.add_circle_outline_rounded,
+                        size: 14,
+                        color: cs.primary,
+                      ),
+                      label: Text(
+                        'Recharge',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: cs.primary,
+                        ),
+                      ),
                       style: TextButton.styleFrom(
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
                         minimumSize: Size.zero,
                       ),
                     ),
@@ -1018,40 +1100,61 @@ class _StudentCardState extends State<_StudentCard>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Recharge Wallet',
-                    style: GoogleFonts.inter(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.4)),
+                Text(
+                  'Recharge Wallet',
+                  style: GoogleFonts.inter(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.4,
+                  ),
+                ),
                 const SizedBox(height: 8),
-                Text('${student.name} (${student.id})',
-                    style: GoogleFonts.inter(
-                        color: cs.onSurfaceVariant, fontSize: 14)),
+                Text(
+                  '${student.name} (${student.id})',
+                  style: GoogleFonts.inter(
+                    color: cs.onSurfaceVariant,
+                    fontSize: 14,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Text('Current Balance: ',
-                        style: GoogleFonts.inter(
-                            color: cs.onSurfaceVariant, fontSize: 13)),
-                    Text(CurrencyFormatter.format(student.balance),
-                        style: GoogleFonts.inter(
-                            color: pos.info,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13)),
+                    Text(
+                      'Current Balance: ',
+                      style: GoogleFonts.inter(
+                        color: cs.onSurfaceVariant,
+                        fontSize: 13,
+                      ),
+                    ),
+                    Text(
+                      CurrencyFormatter.format(student.balance),
+                      style: GoogleFonts.inter(
+                        color: pos.info,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
                   ],
                 ),
                 if (student.hasDebt) ...[
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      Text('Current Debt: ',
-                          style: GoogleFonts.inter(
-                              color: cs.onSurfaceVariant, fontSize: 13)),
-                      Text(CurrencyFormatter.format(student.debt),
-                          style: GoogleFonts.inter(
-                              color: pos.error,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13)),
+                      Text(
+                        'Current Debt: ',
+                        style: GoogleFonts.inter(
+                          color: cs.onSurfaceVariant,
+                          fontSize: 13,
+                        ),
+                      ),
+                      Text(
+                        CurrencyFormatter.format(student.debt),
+                        style: GoogleFonts.inter(
+                          color: pos.error,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -1063,14 +1166,19 @@ class _StudentCardState extends State<_StudentCard>
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.info_outline_rounded,
-                            size: 14, color: pos.warning),
+                        Icon(
+                          Icons.info_outline_rounded,
+                          size: 14,
+                          color: pos.warning,
+                        ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             'Debt will be automatically cleared from recharge amount',
                             style: GoogleFonts.inter(
-                                color: pos.warning, fontSize: 11),
+                              color: pos.warning,
+                              fontSize: 11,
+                            ),
                           ),
                         ),
                       ],
@@ -1093,32 +1201,36 @@ class _StudentCardState extends State<_StudentCard>
                   height: 50,
                   child: ElevatedButton(
                     onPressed: () async {
-                      final amount =
-                          double.tryParse(amountController.text);
+                      final amount = double.tryParse(amountController.text);
                       if (amount == null || amount <= 0) return;
 
-                      await StudentRepository()
-                          .rechargeWallet(student.id, amount);
+                      await StudentRepository().rechargeWallet(
+                        student.id,
+                        amount,
+                      );
                       await AuditRepository().log(
                         action: AppConstants.auditRecharge,
                         description:
                             'Recharged ${student.name}: ${CurrencyFormatter.format(amount)}',
-                        metadata: {
-                          'student_id': student.id,
-                          'amount': amount
-                        },
+                        metadata: {'student_id': student.id, 'amount': amount},
                       );
                       if (ctx.mounted) Navigator.pop(ctx);
+                      widget.onRechargeSuccess();
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: pos.info,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                     ),
-                    child: Text('Recharge',
-                        style: GoogleFonts.inter(
-                            fontSize: 16, fontWeight: FontWeight.w600)),
+                    child: Text(
+                      'Recharge',
+                      style: GoogleFonts.inter(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -1152,14 +1264,136 @@ class _StatChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label,
-              style: GoogleFonts.inter(
-                  color: color.withValues(alpha: 0.6), fontSize: 12)),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              color: color.withValues(alpha: 0.6),
+              fontSize: 12,
+            ),
+          ),
           const SizedBox(width: 6),
-          Text(value,
-              style: GoogleFonts.inter(
-                  color: color, fontSize: 14, fontWeight: FontWeight.w700)),
+          Text(
+            value,
+            style: GoogleFonts.inter(
+              color: color,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _AppleRefreshButton extends StatefulWidget {
+  final VoidCallback onPressed;
+  final bool isRefreshing;
+
+  const _AppleRefreshButton({
+    required this.onPressed,
+    required this.isRefreshing,
+  });
+
+  @override
+  State<_AppleRefreshButton> createState() => _AppleRefreshButtonState();
+}
+
+class _AppleRefreshButtonState extends State<_AppleRefreshButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _rotateCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _rotateCtrl = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+  }
+
+  @override
+  void didUpdateWidget(_AppleRefreshButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isRefreshing && !oldWidget.isRefreshing) {
+      _rotateCtrl.forward(from: 0);
+    } else if (!widget.isRefreshing && oldWidget.isRefreshing) {
+      _rotateCtrl.stop();
+      _rotateCtrl.reset();
+    }
+  }
+
+  @override
+  void dispose() {
+    _rotateCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTap: widget.isRefreshing ? null : widget.onPressed,
+      child: AnimatedBuilder(
+        animation: _rotateCtrl,
+        builder: (_, child) => Transform.rotate(
+          angle: _rotateCtrl.value * 2 * 3.14159,
+          child: child,
+        ),
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            gradient: isDark
+                ? LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.white.withValues(alpha: 0.08),
+                      Colors.white.withValues(alpha: 0.04),
+                    ],
+                  )
+                : const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFFFFFFFF), Color(0xFFF2F2F7)],
+                  ),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                blurRadius: isDark ? 8 : 4,
+                offset: const Offset(0, 2),
+              ),
+              if (!isDark)
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  blurRadius: 1,
+                  offset: const Offset(0, 1),
+                ),
+            ],
+            border: isDark
+                ? Border.all(
+                    color: Colors.white.withValues(alpha: 0.06),
+                    width: 0.5,
+                  )
+                : null,
+          ),
+          child: Center(
+            child: widget.isRefreshing
+                ? SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation(cs.primary),
+                    ),
+                  )
+                : Icon(Icons.refresh_rounded, size: 22, color: cs.primary),
+          ),
+        ),
       ),
     );
   }

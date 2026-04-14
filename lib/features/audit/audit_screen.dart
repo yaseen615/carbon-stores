@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/utils/date_formatter.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../core/theme/pos_colors.dart';
 import '../../data/models/audit_log_model.dart';
 import '../../data/repositories/audit_repository.dart';
@@ -21,31 +22,45 @@ class _AuditScreenState extends State<AuditScreen> {
     final pos = context.pos;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    final isDesktop = Responsive.isTabletOrDesktop(context);
+    final isPhone = Responsive.isPhone(context);
+    final topPadding = isPhone ? MediaQuery.paddingOf(context).top + 16 : 20.0;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+      padding: EdgeInsets.fromLTRB(isDesktop ? 24 : 16, topPadding, isDesktop ? 24 : 16, isPhone ? 8 : 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ─── Header ───
-          Row(
-            children: [
-              Text('Audit Logs',
-                  style: GoogleFonts.inter(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.4)),
-              const Spacer(),
-              OutlinedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.filter_list_rounded, size: 18),
-                label: const Text('Filter'),
-                style: OutlinedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+          if (isDesktop)
+            Row(
+              children: [
+                Text('Audit Logs',
+                    style: GoogleFonts.inter(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.4)),
+                const Spacer(),
+                _buildFilterButton(),
+              ],
+            )
+          else
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Audit Logs',
+                        style: GoogleFonts.inter(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.4)),
+                    _buildFilterButton(),
+                  ],
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
           const SizedBox(height: 20),
 
           // ─── Logs Stream ───
@@ -95,6 +110,18 @@ class _AuditScreenState extends State<AuditScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFilterButton() {
+    return OutlinedButton.icon(
+      onPressed: () {},
+      icon: const Icon(Icons.filter_list_rounded, size: 18),
+      label: const Text('Filter'),
+      style: OutlinedButton.styleFrom(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12)),
       ),
     );
   }

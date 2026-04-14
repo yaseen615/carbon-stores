@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/pos_colors.dart';
 import '../../core/utils/currency_formatter.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../core/constants/app_constants.dart';
 import '../../data/models/expense_model.dart';
@@ -21,52 +22,54 @@ class ExpensesScreen extends ConsumerWidget {
     final pos = context.pos;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    final isDesktop = Responsive.isTabletOrDesktop(context);
+    final isPhone = Responsive.isPhone(context);
+    final topPadding = isPhone ? MediaQuery.paddingOf(context).top + 16 : 20.0;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+      padding: EdgeInsets.fromLTRB(isDesktop ? 24 : 16, topPadding, isDesktop ? 24 : 16, 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header
-          Row(
-            children: [
-              Text('Expenses',
-                  style: GoogleFonts.inter(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.4)),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: pos.error.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+          if (isDesktop)
+            Row(
+              children: [
+                Text('Expenses',
+                    style: GoogleFonts.inter(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.4)),
+                const Spacer(),
+                _buildTotalBadge(pos, totalExpenses),
+                const SizedBox(width: 12),
+                _buildAddButton(context),
+              ],
+            )
+          else
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Total ',
+                    Text('Expenses',
                         style: GoogleFonts.inter(
-                            color: pos.error.withValues(alpha: 0.6), fontSize: 13)),
-                    Text(CurrencyFormatter.format(totalExpenses),
-                        style: GoogleFonts.inter(
-                            color: pos.error,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700)),
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.4)),
                   ],
                 ),
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: () => _showExpenseForm(context),
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Add Expense'),
-                style: ElevatedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: _buildTotalBadge(pos, totalExpenses)),
+                    const SizedBox(width: 12),
+                    Expanded(child: _buildAddButton(context)),
+                  ],
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
           const SizedBox(height: 20),
 
           // Expenses Table
@@ -96,6 +99,100 @@ class ExpensesScreen extends ConsumerWidget {
                   );
                 }
 
+                // ─── Phone: Card-based expense list ───
+                if (isPhone) {
+                  return ListView.separated(
+                    padding: const EdgeInsets.only(bottom: 80),
+                    itemCount: expenses.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final expense = expenses[index];
+                      return Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: cs.surface,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                          border: isDark
+                              ? Border.all(
+                                  color: Colors.white.withValues(alpha: 0.06),
+                                  width: 0.5)
+                              : null,
+                        ),
+                        child: Row(
+                          children: [
+                            // Icon
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: pos.error.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(Icons.receipt_long_rounded,
+                                  size: 20, color: pos.error),
+                            ),
+                            const SizedBox(width: 14),
+                            // Details
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    expense.productName,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: cs.onSurface,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${expense.quantity} × ${CurrencyFormatter.format(expense.cost)} • ${DateFormatter.formatDate(expense.date)}',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      color: cs.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Total + delete
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  CurrencyFormatter.format(expense.totalCost),
+                                  style: GoogleFonts.inter(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: pos.error,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                GestureDetector(
+                                  onTap: () => _confirmDelete(context, expense.id),
+                                  child: Icon(Icons.delete_outline_rounded,
+                                      size: 18, color: pos.error.withValues(alpha: 0.6)),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  );
+                }
+
+                // ─── Tablet / Desktop: DataTable ───
                 return Container(
                   decoration: BoxDecoration(
                     color: cs.surface,
@@ -115,6 +212,7 @@ class ExpensesScreen extends ConsumerWidget {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(16),
                     child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
                       child: DataTable(
                         headingRowColor: WidgetStateProperty.all(
                           isDark
@@ -172,6 +270,42 @@ class ExpensesScreen extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTotalBadge(POSColors pos, double totalExpenses) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: pos.error.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text('Total ',
+              style: GoogleFonts.inter(
+                  color: pos.error.withValues(alpha: 0.6), fontSize: 13)),
+          Text(CurrencyFormatter.format(totalExpenses),
+              style: GoogleFonts.inter(
+                  color: pos.error,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAddButton(BuildContext context) {
+    return ElevatedButton.icon(
+      onPressed: () => _showExpenseForm(context),
+      icon: const Icon(Icons.add_rounded, size: 18),
+      label: const Text('Add Expense'),
+      style: ElevatedButton.styleFrom(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12)),
       ),
     );
   }

@@ -87,7 +87,7 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.brandPrimary,
+      backgroundColor: const Color.fromRGBO(145, 85, 35, 1),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -100,7 +100,7 @@ class _SplashScreenState extends State<SplashScreen>
                   opacity: _logoOpacity.value,
                   child: Transform.scale(
                     scale: _logoScale.value,
-                    child: const AppLogo(size: 120, showBackground: false),
+                    child: const AppLogo(size: 240, showBackground: false),
                   ),
                 );
               },

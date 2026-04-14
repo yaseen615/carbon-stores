@@ -48,24 +48,28 @@ class ReceiptDialog extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Success Icon — larger
+              // Status Icon
               Container(
                 width: 64,
                 height: 64,
                 decoration: BoxDecoration(
-                  color: pos.success.withValues(alpha: 0.12),
+                  color: (transaction?.isVoided == true ? pos.error : pos.success).withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(Icons.check_rounded, color: pos.success, size: 36),
+                child: Icon(
+                  transaction?.isVoided == true ? Icons.cancel_rounded : Icons.check_rounded, 
+                  color: transaction?.isVoided == true ? pos.error : pos.success, 
+                  size: 36
+                ),
               ),
               const SizedBox(height: 16),
 
               Text(
-                'Payment Successful!',
+                transaction?.isVoided == true ? 'Purchase Cancelled' : 'Payment Successful!',
                 style: GoogleFonts.inter(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
-                  color: pos.success,
+                  color: transaction?.isVoided == true ? pos.error : pos.success,
                   letterSpacing: -0.4,
                 ),
               ),
@@ -81,7 +85,7 @@ class ReceiptDialog extends StatelessWidget {
               const SizedBox(height: 2),
 
               Text(
-                DateFormatter.formatDateTime(DateTime.now()),
+                DateFormatter.formatDateTime(transaction?.createdAt ?? DateTime.now()),
                 style: GoogleFonts.inter(
                   color: cs.onSurfaceVariant,
                   fontSize: 12,

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import '../theme/app_colors.dart';
 
 /// Refined CG logo monogram — Apple-inspired treatment.
@@ -31,16 +31,14 @@ class AppLogo extends StatelessWidget {
               ],
             )
           : null,
-      child: Center(
-        child: Text(
-          'Cg',
-          style: GoogleFonts.inter(
-            fontSize: size * 0.42,
-            fontWeight: FontWeight.w300,
-            color: AppColors.brandSecondary,
-            letterSpacing: -1,
-            height: 1,
-          ),
+      child: ClipRRect(
+        borderRadius: showBackground ? BorderRadius.circular(size * 0.28) : BorderRadius.zero,
+        child: Image.asset(
+          'assets/images/logo.png',
+          width: size,
+          height: size,
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.high,
         ),
       ),
     );

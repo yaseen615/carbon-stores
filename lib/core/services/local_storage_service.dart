@@ -115,11 +115,19 @@ class LocalStorageService {
       fileName: 'carbon_stores_images_backup.zip',
       type: FileType.custom,
       allowedExtensions: ['zip'],
+      bytes: Uint8List.fromList(zipData),
     );
 
     if (outputFile != null) {
-      final file = File(outputFile);
-      await file.writeAsBytes(zipData);
+      // On some platforms saveFile already writes the bytes if provided.
+      // On Desktop, it might just return the path. 
+      // To be safe, we check if the file exists/needs writing.
+      if (!kIsWeb) {
+        final file = File(outputFile);
+        if (!await file.exists() || (await file.length() == 0)) {
+          await file.writeAsBytes(zipData);
+        }
+      }
       return outputFile;
     }
     
@@ -131,10 +139,11 @@ class LocalStorageService {
     FilePickerResult? result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['zip'],
+      withData: true, // Required for Web
     );
 
-    if (result != null && result.files.single.path != null) {
-      final bytes = await File(result.files.single.path!).readAsBytes();
+    if (result != null && (result.files.single.path != null || result.files.single.bytes != null)) {
+      final bytes = result.files.single.bytes ?? await File(result.files.single.path!).readAsBytes();
       final archive = ZipDecoder().decodeBytes(bytes);
       int restoredCount = 0;
 

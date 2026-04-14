@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/pos_colors.dart';
 import '../../core/utils/currency_formatter.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../core/widgets/search_field.dart';
 import '../../core/widgets/status_badge.dart';
 import '../../core/constants/app_constants.dart';
@@ -28,107 +29,155 @@ class InventoryScreen extends ConsumerWidget {
     final cs = Theme.of(context).colorScheme;
     final pos = context.pos;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDesktop = Responsive.isTabletOrDesktop(context);
+    final isPhone = Responsive.isPhone(context);
+    final topPadding = isPhone ? MediaQuery.paddingOf(context).top + 16 : 20.0;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+      padding: EdgeInsets.fromLTRB(isDesktop ? 24 : 16, topPadding, isDesktop ? 24 : 16, isPhone ? 8 : 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ─── Header ───
-          Row(
-            children: [
-              Text('Inventory',
-                  style: GoogleFonts.inter(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.4)),
-              const Spacer(),
-              if (lowStockProducts.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: pos.warning.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
+          if (isDesktop)
+            Row(
+              children: [
+                Text('Inventory',
+                    style: GoogleFonts.inter(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.4)),
+                const Spacer(),
+                if (lowStockProducts.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: pos.warning.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.warning_rounded, size: 14, color: pos.warning),
+                        const SizedBox(width: 6),
+                        Text('${lowStockProducts.length} low stock',
+                            style: GoogleFonts.inter(
+                                color: pos.warning,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600)),
+                      ],
+                    ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.warning_rounded, size: 14, color: pos.warning),
-                      const SizedBox(width: 6),
-                      Text('${lowStockProducts.length} low stock',
-                          style: GoogleFonts.inter(
-                              color: pos.warning,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600)),
-                    ],
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  onPressed: () => _showProductForm(context),
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Add Product'),
+                  style: ElevatedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: () => _showProductForm(context),
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Add Product'),
-                style: ElevatedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+              ],
+            )
+          else
+            // Phone Header
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text('Inventory',
+                        style: GoogleFonts.inter(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.4)),
+                    const Spacer(),
+                    if (lowStockProducts.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: pos.warning.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.warning_rounded, size: 12, color: pos.warning),
+                            const SizedBox(width: 4),
+                            Text('${lowStockProducts.length} low',
+                                style: GoogleFonts.inter(
+                                    color: pos.warning,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: () => _showProductForm(context),
+                      icon: const Icon(Icons.add_rounded, size: 16),
+                      label: const Text('Add'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
           const SizedBox(height: 16),
 
           // Search + Filter
-          Row(
-            children: [
-              SizedBox(
-                width: 280,
-                child: SearchField(
+          if (isDesktop)
+            Row(
+              children: [
+                SizedBox(
+                  width: 280,
+                  child: SearchField(
+                    hintText: 'Search products...',
+                    onChanged: (query) {
+                      ref.read(productSearchQueryProvider.notifier).state = query;
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: pos.fill,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: _buildCategoryDropdown(context, ref, categories, cs),
+                ),
+              ],
+            )
+          else
+            Column(
+              children: [
+                SearchField(
                   hintText: 'Search products...',
                   onChanged: (query) {
                     ref.read(productSearchQueryProvider.notifier).state = query;
                   },
                 ),
-              ),
-              const SizedBox(width: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                decoration: BoxDecoration(
-                  color: pos.fill,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String?>(
-                    value: ref.watch(selectedCategoryProvider),
-                    hint: Text('All Categories',
-                        style: GoogleFonts.inter(
-                            color: cs.onSurfaceVariant, fontSize: 14)),
-                    dropdownColor: cs.surface,
-                    borderRadius: BorderRadius.circular(14),
-                    items: [
-                      DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text('All Categories',
-                            style: GoogleFonts.inter(
-                                fontSize: 14, color: cs.onSurface)),
-                      ),
-                      ...categories.map((c) => DropdownMenuItem(
-                            value: c,
-                            child: Text(c,
-                                style: GoogleFonts.inter(
-                                    fontSize: 14, color: cs.onSurface)),
-                          )),
-                    ],
-                    onChanged: (value) {
-                      ref.read(selectedCategoryProvider.notifier).state = value;
-                    },
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: pos.fill,
+                    borderRadius: BorderRadius.circular(12),
                   ),
+                  child: _buildCategoryDropdown(context, ref, categories, cs),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
           const SizedBox(height: 16),
 
-          // ─── Products Table ───
+          // ─── Products: Card list (Phone) / DataTable (Tablet/Desktop) ───
           Expanded(
             child: productsAsync.when(
               loading: () => Center(
@@ -155,7 +204,27 @@ class InventoryScreen extends ConsumerWidget {
                   );
                 }
 
-                // Modern table inside a shadow card
+                // ─── Phone: Apple-style card list ───
+                if (isPhone) {
+                  return ListView.separated(
+                    padding: const EdgeInsets.only(bottom: 80),
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final product = filtered[index];
+                      return _PhoneProductCard(
+                        product: product,
+                        pos: pos,
+                        isDark: isDark,
+                        onEdit: () => _showProductForm(context, product: product),
+                        onStockIn: () => _showStockInDialog(context, product),
+                        onDelete: () => _confirmDelete(context, product),
+                      );
+                    },
+                  );
+                }
+
+                // ─── Tablet / Desktop: DataTable ───
                 return Container(
                   decoration: BoxDecoration(
                     color: cs.surface,
@@ -175,6 +244,7 @@ class InventoryScreen extends ConsumerWidget {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(16),
                     child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
                       child: DataTable(
                         headingRowColor: WidgetStateProperty.all(
                           isDark
@@ -303,6 +373,36 @@ class InventoryScreen extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryDropdown(BuildContext context, WidgetRef ref, List<String> categories, ColorScheme cs) {
+    return DropdownButtonHideUnderline(
+      child: DropdownButton<String?>(
+        value: ref.watch(selectedCategoryProvider),
+        hint: Text('All Categories',
+            style: GoogleFonts.inter(
+                color: cs.onSurfaceVariant, fontSize: 14)),
+        dropdownColor: cs.surface,
+        borderRadius: BorderRadius.circular(14),
+        items: [
+          DropdownMenuItem<String?>(
+            value: null,
+            child: Text('All Categories',
+                style: GoogleFonts.inter(
+                    fontSize: 14, color: cs.onSurface)),
+          ),
+          ...categories.map((c) => DropdownMenuItem(
+                value: c,
+                child: Text(c,
+                    style: GoogleFonts.inter(
+                        fontSize: 14, color: cs.onSurface)),
+              )),
+        ],
+        onChanged: (value) {
+          ref.read(selectedCategoryProvider.notifier).state = value;
+        },
       ),
     );
   }
@@ -721,3 +821,209 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 }
+
+/// Apple HIG-inspired product card for phone inventory view
+class _PhoneProductCard extends StatelessWidget {
+  final Product product;
+  final dynamic pos;
+  final bool isDark;
+  final VoidCallback onEdit;
+  final VoidCallback onStockIn;
+  final VoidCallback onDelete;
+
+  const _PhoneProductCard({
+    required this.product,
+    required this.pos,
+    required this.isDark,
+    required this.onEdit,
+    required this.onStockIn,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    Color stockColor;
+    String stockLabel;
+    if (product.isOutOfStock) {
+      stockColor = pos.error;
+      stockLabel = 'Out of Stock';
+    } else if (product.isLowStock) {
+      stockColor = pos.warning;
+      stockLabel = '${product.stock} left';
+    } else {
+      stockColor = pos.success;
+      stockLabel = '${product.stock} in stock';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: product.isOutOfStock
+            ? pos.error.withValues(alpha: 0.03)
+            : cs.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+        border: isDark
+            ? Border.all(
+                color: Colors.white.withValues(alpha: 0.06), width: 0.5)
+            : null,
+      ),
+      child: Row(
+        children: [
+          // Product info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Name + Category row
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        product.name,
+                        style: GoogleFonts.inter(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: cs.onSurface,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: cs.primary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        product.category,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: cs.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                // Price + Stock row
+                Row(
+                  children: [
+                    Text(
+                      CurrencyFormatter.format(product.price),
+                      style: GoogleFonts.inter(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: cs.onSurface,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: stockColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        stockLabel,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: stockColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Action buttons
+          const SizedBox(width: 8),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _PhoneActionButton(
+                icon: Icons.add_rounded,
+                color: pos.success,
+                onTap: onStockIn,
+                tooltip: 'Stock In',
+              ),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _PhoneActionButton(
+                    icon: Icons.edit_rounded,
+                    color: cs.primary,
+                    onTap: onEdit,
+                    tooltip: 'Edit',
+                    size: 32,
+                  ),
+                  const SizedBox(width: 6),
+                  _PhoneActionButton(
+                    icon: Icons.delete_outline_rounded,
+                    color: pos.error,
+                    onTap: onDelete,
+                    tooltip: 'Delete',
+                    size: 32,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PhoneActionButton extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  final String tooltip;
+  final double size;
+
+  const _PhoneActionButton({
+    required this.icon,
+    required this.color,
+    required this.onTap,
+    required this.tooltip,
+    this.size = 36,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, size: size * 0.5, color: color),
+        ),
+      ),
+    );
+  }
+}
+

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -7,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/pos_colors.dart';
 import '../../core/services/local_storage_service.dart';
 import '../../core/widgets/app_modal.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../providers/navigation_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../pos/pos_screen.dart';
@@ -27,43 +29,106 @@ class AppShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currentPage = ref.watch(currentPageProvider);
+    final device = Responsive.of(context);
+    final cs = Theme.of(context).colorScheme;
 
-    return Scaffold(
-      body: Row(
-        children: [
-          // ─── Sidebar Navigation ───
-          _SideNav(
-            currentPage: currentPage,
-            onPageSelected: (page) {
-              ref.read(currentPageProvider.notifier).state = page;
-            },
+    final content = AnimatedSwitcher(
+      duration: const Duration(milliseconds: 250),
+      switchInCurve: Curves.easeOut,
+      switchOutCurve: Curves.easeIn,
+      transitionBuilder: (child, animation) {
+        return FadeTransition(
+          opacity: animation,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, 0.01),
+              end: Offset.zero,
+            ).animate(animation),
+            child: child,
           ),
-
-          // ─── Page Content ───
-          Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
-              switchInCurve: Curves.easeOut,
-              switchOutCurve: Curves.easeIn,
-              transitionBuilder: (child, animation) {
-                // Fade + subtle vertical slide
-                return FadeTransition(
-                  opacity: animation,
-                  child: SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0, 0.01),
-                      end: Offset.zero,
-                    ).animate(animation),
-                    child: child,
-                  ),
-                );
-              },
-              child: _buildPage(currentPage),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
+      child: _buildPage(currentPage),
     );
+
+    // ─── Phone Layout: Bottom Tab Bar ───
+    if (device == DeviceType.phone) {
+      return _PhoneShell(
+        currentPage: currentPage,
+        content: content,
+        onPageSelected: (page) {
+          ref.read(currentPageProvider.notifier).state = page;
+        },
+        onShowSettings: () => _showSettingsModal(context, ref),
+      );
+    }
+
+    // ─── Desktop Layout: Sidebar ───
+    if (device == DeviceType.desktop) {
+      return Scaffold(
+        body: Row(
+          children: [
+            _SideNav(
+              currentPage: currentPage,
+              isMobile: false,
+              onPageSelected: (page) {
+                ref.read(currentPageProvider.notifier).state = page;
+              },
+            ),
+            Expanded(child: content),
+          ],
+        ),
+      );
+    }
+
+    // ─── Tablet Layout: Drawer (unchanged) ───
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          _getPageTitle(currentPage),
+          style: GoogleFonts.inter(
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.5,
+            fontSize: 20,
+          ),
+        ),
+        centerTitle: true,
+        elevation: 0,
+        backgroundColor: cs.surface,
+        foregroundColor: cs.onSurface,
+      ),
+      drawer: Drawer(
+        width: 250,
+        child: _SideNav(
+          currentPage: currentPage,
+          isMobile: true,
+          onPageSelected: (page) {
+            ref.read(currentPageProvider.notifier).state = page;
+            Navigator.pop(context);
+          },
+        ),
+      ),
+      body: content,
+    );
+  }
+
+  String _getPageTitle(AppPage page) {
+    switch (page) {
+      case AppPage.pos:
+        return 'Point of Sale';
+      case AppPage.students:
+        return 'Students';
+      case AppPage.inventory:
+        return 'Inventory';
+      case AppPage.expenses:
+        return 'Expenses';
+      case AppPage.analytics:
+        return 'Analytics';
+      case AppPage.transactions:
+        return 'Transactions';
+      case AppPage.auditLog:
+        return 'Audit Log';
+    }
   }
 
   Widget _buildPage(AppPage page) {
@@ -84,15 +149,320 @@ class AppShell extends ConsumerWidget {
         return const AuditScreen(key: ValueKey('auditLog'));
     }
   }
+
+  void _showSettingsModal(BuildContext context, WidgetRef ref) {
+    showAppModal(
+      context: context,
+      maxWidth: 400,
+      builder: (ctx) => _SettingsModalContent(),
+    );
+  }
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// Phone Shell — iOS-style bottom tab bar with translucent blur
+// ═══════════════════════════════════════════════════════════════════════
+
+class _PhoneShell extends StatelessWidget {
+  final AppPage currentPage;
+  final Widget content;
+  final ValueChanged<AppPage> onPageSelected;
+  final VoidCallback onShowSettings;
+
+  const _PhoneShell({
+    required this.currentPage,
+    required this.content,
+    required this.onPageSelected,
+    required this.onShowSettings,
+  });
+
+  /// The 5 bottom tab items. "More" is handled separately.
+  static const _primaryTabs = [
+    (page: AppPage.pos, icon: Icons.point_of_sale_rounded, activeIcon: Icons.point_of_sale_rounded, label: 'Sales'),
+    (page: AppPage.inventory, icon: Icons.inventory_2_outlined, activeIcon: Icons.inventory_2_rounded, label: 'Products'),
+    (page: AppPage.students, icon: Icons.school_outlined, activeIcon: Icons.school_rounded, label: 'Students'),
+    (page: AppPage.analytics, icon: Icons.analytics_outlined, activeIcon: Icons.analytics_rounded, label: 'Analytics'),
+  ];
+
+  /// Pages accessible under the "More" tab
+  static const _morePages = [
+    (page: AppPage.expenses, icon: Icons.receipt_long_outlined, label: 'Expenses'),
+    (page: AppPage.transactions, icon: Icons.history_rounded, label: 'History'),
+    (page: AppPage.auditLog, icon: Icons.fact_check_outlined, label: 'Audit Log'),
+  ];
+
+  bool get _isMorePage =>
+      _morePages.any((m) => m.page == currentPage);
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Scaffold(
+      body: content,
+      extendBody: true,
+      bottomNavigationBar: ClipRRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDark
+                  ? cs.surface.withValues(alpha: 0.85)
+                  : cs.surface.withValues(alpha: 0.92),
+              border: Border(
+                top: BorderSide(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.black.withValues(alpha: 0.06),
+                  width: 0.5,
+                ),
+              ),
+            ),
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 6, bottom: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    ..._primaryTabs.map((tab) => _BottomTabItem(
+                          icon: tab.icon,
+                          activeIcon: tab.activeIcon,
+                          label: tab.label,
+                          isSelected: currentPage == tab.page,
+                          onTap: () => onPageSelected(tab.page),
+                        )),
+                    _BottomTabItem(
+                      icon: Icons.more_horiz_rounded,
+                      activeIcon: Icons.more_horiz_rounded,
+                      label: 'More',
+                      isSelected: _isMorePage,
+                      onTap: () => _showMoreSheet(context),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showMoreSheet(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: false,
+      builder: (ctx) {
+        return Container(
+          decoration: BoxDecoration(
+            color: cs.surface,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.1),
+                blurRadius: 24,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Drag handle
+                Container(
+                  margin: const EdgeInsets.only(top: 12, bottom: 8),
+                  width: 36,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'More',
+                      style: GoogleFonts.inter(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: cs.onSurface,
+                        letterSpacing: -0.4,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                ..._morePages.map((item) => _MoreSheetItem(
+                      icon: item.icon,
+                      label: item.label,
+                      isSelected: currentPage == item.page,
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        onPageSelected(item.page);
+                      },
+                    )),
+                _MoreSheetItem(
+                  icon: Icons.settings_outlined,
+                  label: 'Settings',
+                  isSelected: false,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    onShowSettings();
+                  },
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _BottomTabItem extends StatelessWidget {
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _BottomTabItem({
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: 64,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: Icon(
+                isSelected ? activeIcon : icon,
+                key: ValueKey(isSelected),
+                size: 24,
+                color: isSelected ? cs.primary : cs.onSurfaceVariant.withValues(alpha: 0.5),
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 10,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                color: isSelected ? cs.primary : cs.onSurfaceVariant.withValues(alpha: 0.5),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MoreSheetItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _MoreSheetItem({
+    required this.icon,
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? cs.primary.withValues(alpha: 0.1)
+                      : cs.onSurfaceVariant.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  size: 20,
+                  color: isSelected ? cs.primary : cs.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  label,
+                  style: GoogleFonts.inter(
+                    fontSize: 16,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                    color: isSelected ? cs.primary : cs.onSurface,
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 20,
+                color: cs.onSurfaceVariant.withValues(alpha: 0.3),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Sidebar Navigation (Desktop + Tablet Drawer — unchanged)
+// ═══════════════════════════════════════════════════════════════════════
 
 class _SideNav extends ConsumerWidget {
   final AppPage currentPage;
   final ValueChanged<AppPage> onPageSelected;
+  final bool isMobile;
 
   const _SideNav({
     required this.currentPage,
     required this.onPageSelected,
+    this.isMobile = false,
   });
 
   @override
@@ -101,28 +471,28 @@ class _SideNav extends ConsumerWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
-      width: 150,
+      width: isMobile ? double.infinity : 150,
       decoration: BoxDecoration(
         color: cs.surface,
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.04),
-            blurRadius: 16,
-            offset: const Offset(4, 0),
-          ),
+          if (!isMobile)
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.04),
+              blurRadius: 16,
+              offset: const Offset(4, 0),
+            ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 32),
-          // Large Title "Home"
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: EdgeInsets.symmetric(horizontal: isMobile ? 24 : 16),
             child: Text(
               'Home',
               style: GoogleFonts.inter(
-                fontSize: 26,
+                fontSize: isMobile ? 28 : 24,
                 fontWeight: FontWeight.w700,
                 color: cs.onSurface,
                 letterSpacing: -0.5,
@@ -130,26 +500,28 @@ class _SideNav extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 8),
-          
-          // PosStatsBar integrated directly into sidebar
-          if (currentPage == AppPage.pos) const PosStatsBar(),
-          
-          if (currentPage != AppPage.pos) const SizedBox(height: 24),
 
-          // Nav Items
+          if (currentPage == AppPage.pos)
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 0),
+              child: const PosStatsBar(),
+            ),
+
+          if (currentPage != AppPage.pos) SizedBox(height: isMobile ? 32 : 24),
+
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               children: [
                 _NavItem(
                   icon: Icons.point_of_sale_rounded,
-                  label: 'Sales', // Match "Sales" from mockup instead of POS
+                  label: 'Sales',
                   isSelected: currentPage == AppPage.pos,
                   onTap: () => onPageSelected(AppPage.pos),
                 ),
                 _NavItem(
                   icon: Icons.inventory_2_outlined,
-                  label: 'Products', // Match "Products" from mockup
+                  label: 'Products',
                   isSelected: currentPage == AppPage.inventory,
                   onTap: () => onPageSelected(AppPage.inventory),
                 ),
@@ -186,7 +558,6 @@ class _SideNav extends ConsumerWidget {
               ],
             ),
           ),
-          // Settings
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: _NavItem(
@@ -234,46 +605,51 @@ class _NavItemState extends State<_NavItem> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isWide = MediaQuery.sizeOf(context).width >= 800;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: EdgeInsets.symmetric(vertical: isWide ? 4 : 6),
       child: MouseRegion(
-        onEnter: (_) => setState(() => _isHovered = true),
-        onExit: (_) => setState(() => _isHovered = false),
+        onEnter: (_) => isWide ? setState(() => _isHovered = true) : null,
+        onExit: (_) => isWide ? setState(() => _isHovered = false) : null,
         child: GestureDetector(
           onTap: widget.onTap,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeInOut,
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+            padding: EdgeInsets.symmetric(
+              vertical: isWide ? 14 : 18,
+              horizontal: 12,
+            ),
             decoration: BoxDecoration(
               color: widget.isSelected
-                  ? cs.onSurfaceVariant.withValues(alpha: 0.12) // Mockup has grey active background, not blue
+                  ? cs.primary.withValues(alpha: isWide ? 0.12 : 0.08)
                   : _isHovered
                       ? cs.onSurfaceVariant.withValues(alpha: 0.05)
                       : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
             ),
             child: Row(
               children: [
                 Icon(
                   widget.icon,
-                  size: 22,
+                  size: isWide ? 22 : 24,
                   color: widget.isSelected
-                      ? cs.onSurface
+                      ? cs.primary
                       : _isHovered
                           ? cs.onSurface
                           : cs.onSurfaceVariant,
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 14),
                 Expanded(
                   child: Text(
                     widget.label,
                     style: GoogleFonts.inter(
-                      fontSize: 14,
-                      fontWeight: widget.isSelected ? FontWeight.w600 : FontWeight.w500,
+                      fontSize: isWide ? 14 : 16,
+                      fontWeight:
+                          widget.isSelected ? FontWeight.w600 : FontWeight.w500,
                       color: widget.isSelected
-                          ? cs.onSurface
+                          ? cs.primary
                           : _isHovered
                               ? cs.onSurface
                               : cs.onSurfaceVariant,
@@ -291,7 +667,10 @@ class _NavItemState extends State<_NavItem> {
   }
 }
 
-/// Settings modal content — uses AppModalContent for consistent look.
+// ═══════════════════════════════════════════════════════════════════════
+// Settings Modal (shared by all layouts)
+// ═══════════════════════════════════════════════════════════════════════
+
 class _SettingsModalContent extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -326,8 +705,8 @@ class _SettingsModalContent extends ConsumerWidget {
                   key: ValueKey(isDark),
                   size: 26,
                   color: isDark
-                      ? const Color(0xFFFFD60A) // Apple yellow
-                      : const Color(0xFFFF9500), // Apple orange
+                      ? const Color(0xFFFFD60A)
+                      : const Color(0xFFFF9500),
                 ),
               ),
               const SizedBox(width: 14),
@@ -400,151 +779,35 @@ class _SettingsModalContent extends ConsumerWidget {
 
         const SizedBox(height: 16),
 
-        // ─── Export All Data ───
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () => _exportAllData(context, ref),
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: pos.fill,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.cloud_download_rounded, size: 22, color: cs.primary),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Export Database',
-                          style: GoogleFonts.inter(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: cs.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Download DB as JSON',
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(Icons.chevron_right_rounded, size: 20, color: cs.onSurfaceVariant),
-                ],
-              ),
-            ),
-          ),
+        _buildSettingTile(
+          context,
+          icon: Icons.cloud_download_rounded,
+          title: 'Export Database',
+          subtitle: 'Download DB as JSON',
+          color: cs.primary,
+          onTap: () => _exportAllData(context, ref),
         ),
-
         const SizedBox(height: 12),
-
-        // ─── Export Images ───
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () => _exportImages(context),
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: pos.fill,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.image_outlined, size: 22, color: pos.info),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Export Images Backup',
-                          style: GoogleFonts.inter(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: cs.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Download images as ZIP',
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(Icons.chevron_right_rounded, size: 20, color: cs.onSurfaceVariant),
-                ],
-              ),
-            ),
-          ),
+        _buildSettingTile(
+          context,
+          icon: Icons.image_outlined,
+          title: 'Export Images Backup',
+          subtitle: 'Download images as ZIP',
+          color: pos.info,
+          onTap: () => _exportImages(context),
         ),
-        
         const SizedBox(height: 12),
-
-        // ─── Import Images ───
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () => _importImages(context),
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: pos.fill,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.upload_file_rounded, size: 22, color: pos.success),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Import Images Backup',
-                          style: GoogleFonts.inter(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: cs.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Restore images from ZIP',
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(Icons.chevron_right_rounded, size: 20, color: cs.onSurfaceVariant),
-                ],
-              ),
-            ),
-          ),
+        _buildSettingTile(
+          context,
+          icon: Icons.upload_file_rounded,
+          title: 'Import Images Backup',
+          subtitle: 'Restore images from ZIP',
+          color: pos.success,
+          onTap: () => _importImages(context),
         ),
 
         const SizedBox(height: 24),
 
-        // App version
         Center(
           child: Text(
             'CarbonGurukulam Store v1.0.0',
@@ -555,6 +818,65 @@ class _SettingsModalContent extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSettingTile(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    final pos = context.pos;
+    final isDesktop = MediaQuery.sizeOf(context).width >= 800;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: EdgeInsets.all(isDesktop ? 16 : 18),
+          decoration: BoxDecoration(
+            color: pos.fill,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: isDesktop ? 22 : 24, color: color),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.inter(
+                        fontSize: isDesktop ? 15 : 16,
+                        fontWeight: FontWeight.w600,
+                        color: cs.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.inter(
+                        fontSize: isDesktop ? 13 : 14,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded,
+                  size: 20, color: cs.onSurfaceVariant),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -576,11 +898,16 @@ class _SettingsModalContent extends ConsumerWidget {
       final backup = {
         'export_date': DateTime.now().toIso8601String(),
         'app_version': '1.0.0',
-        'products': products.docs.map((d) => {'id': d.id, ...d.data()}).toList(),
-        'students': students.docs.map((d) => {'id': d.id, ...d.data()}).toList(),
-        'transactions': transactions.docs.map((d) => {'id': d.id, ...d.data()}).toList(),
-        'expenses': expenses.docs.map((d) => {'id': d.id, ...d.data()}).toList(),
-        'audit_logs': auditLogs.docs.map((d) => {'id': d.id, ...d.data()}).toList(),
+        'products':
+            products.docs.map((d) => {'id': d.id, ...d.data()}).toList(),
+        'students':
+            students.docs.map((d) => {'id': d.id, ...d.data()}).toList(),
+        'transactions':
+            transactions.docs.map((d) => {'id': d.id, ...d.data()}).toList(),
+        'expenses':
+            expenses.docs.map((d) => {'id': d.id, ...d.data()}).toList(),
+        'audit_logs':
+            auditLogs.docs.map((d) => {'id': d.id, ...d.data()}).toList(),
       };
 
       final jsonString = const JsonEncoder.withIndent('  ').convert(backup);
@@ -589,7 +916,8 @@ class _SettingsModalContent extends ConsumerWidget {
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ Full backup exported successfully!')),
+          const SnackBar(
+              content: Text('✅ Full backup exported successfully!')),
         );
       }
     } catch (e) {
@@ -615,14 +943,16 @@ class _SettingsModalContent extends ConsumerWidget {
           );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Export cancelled or not supported for native web.')),
+            const SnackBar(
+                content:
+                    Text('Export cancelled or not supported for native web.')),
           );
         }
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-           SnackBar(content: Text('Export failed: $e')),
+          SnackBar(content: Text('Export failed: $e')),
         );
       }
     }
@@ -646,7 +976,7 @@ class _SettingsModalContent extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-           SnackBar(content: Text('Import failed: $e')),
+          SnackBar(content: Text('Import failed: $e')),
         );
       }
     }
@@ -707,7 +1037,8 @@ class _ThemePreviewChipState extends State<_ThemePreviewChip> {
                 widget.label,
                 style: GoogleFonts.inter(
                   fontSize: 12,
-                  fontWeight: widget.isSelected ? FontWeight.w700 : FontWeight.w500,
+                  fontWeight:
+                      widget.isSelected ? FontWeight.w700 : FontWeight.w500,
                   color: widget.fgPreview,
                 ),
               ),

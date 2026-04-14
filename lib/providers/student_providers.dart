@@ -133,6 +133,7 @@ final studentStatsProvider = FutureProvider<StudentStats>((ref) async {
 
 /// Provider for search results (Student objects with balance/debt).
 /// Flow: local index search → get matched IDs → fetch those docs.
+/// Fallback: if local index is empty (never synced), query Firestore directly.
 final studentSearchResultsProvider = FutureProvider<List<Student>>((ref) async {
   final query = ref.watch(studentSearchQueryProvider);
   if (query.trim().isEmpty) return [];
@@ -140,14 +141,24 @@ final studentSearchResultsProvider = FutureProvider<List<Student>>((ref) async {
   final index = ref.read(studentSearchIndexProvider);
   await index.load();
 
-  // Search locally (zero reads)
+  // Try local index first (zero Firestore reads)
   final matches = index.search(query, limit: 12);
-  if (matches.isEmpty) return [];
 
-  // Fetch those specific docs from Firestore (12 reads max)
-  final ids = matches.map((m) => m.studentId).toList();
+  if (matches.isNotEmpty) {
+    // Fetch those specific docs from Firestore (up to 12 reads)
+    final ids = matches.map((m) => m.studentId).toList();
+    final repo = ref.read(studentRepositoryProvider);
+    return repo.getStudentsByIds(ids);
+  }
+
+  // Fallback: if local index is empty or has no matches,
+  // try a direct Firestore lookup by document ID (exact match).
+  // This handles the case before first sync.
   final repo = ref.read(studentRepositoryProvider);
-  return repo.getStudentsByIds(ids);
+  final directMatch = await repo.getStudent(query.trim());
+  if (directMatch != null) return [directMatch];
+
+  return [];
 });
 
 // ═══════════════════════════════════════════════════════════════

@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/pos_colors.dart';
 import '../../core/utils/currency_formatter.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../core/utils/csv_exporter.dart';
 import '../../providers/transaction_providers.dart';
 import '../../providers/expense_providers.dart';
@@ -26,88 +27,90 @@ class AnalyticsScreen extends ConsumerWidget {
     final totalWallet = ref.watch(totalWalletBalanceProvider);
     final totalDebt = ref.watch(totalDebtProvider);
     final currentFilter = ref.watch(analyticsDateFilterProvider);
+    final cs = Theme.of(context).colorScheme;
     final pos = context.pos;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    final isDesktop = Responsive.isTabletOrDesktop(context);
+    final isPhone = Responsive.isPhone(context);
+
+    final topPadding = isPhone ? MediaQuery.paddingOf(context).top + 16 : 20.0;
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+      padding: EdgeInsets.fromLTRB(
+          isDesktop ? 24 : 16, topPadding, isDesktop ? 24 : 16, isPhone ? 80 : 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 16,
-            runSpacing: 16,
+          // ─── Header ───
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Analytics',
                   style: GoogleFonts.inter(
                       fontSize: 28,
                       fontWeight: FontWeight.w700,
+                      color: cs.onSurface,
                       letterSpacing: -0.4)),
-              Wrap(
-                spacing: 12,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: SegmentedButton<AnalyticsDateFilter>(
-                      segments: const [
-                        ButtonSegment(
-                            value: AnalyticsDateFilter.today, label: Text('Today')),
-                        ButtonSegment(
-                            value: AnalyticsDateFilter.thisMonth,
-                            label: Text('Month')),
-                        ButtonSegment(
-                            value: AnalyticsDateFilter.thisYear,
-                            label: Text('Year')),
-                        ButtonSegment(
-                            value: AnalyticsDateFilter.allTime, label: Text('All')),
-                        ButtonSegment(
-                            value: AnalyticsDateFilter.custom,
-                            label: Text('Custom')),
-                      ],
-                      selected: {currentFilter},
-                      onSelectionChanged: (set) async {
-                        final filter = set.first;
-                        if (filter == AnalyticsDateFilter.custom) {
-                          final range = await showDateRangePicker(
-                            context: context,
-                            firstDate: DateTime(2020),
-                            lastDate: DateTime(2030),
-                          );
-                          if (range != null) {
-                            ref
-                                .read(analyticsCustomDateRangeProvider.notifier)
-                                .state = range;
-                            ref.read(analyticsDateFilterProvider.notifier).state =
-                                filter;
-                          }
-                        } else {
-                          ref.read(analyticsDateFilterProvider.notifier).state =
-                              filter;
-                        }
-                      },
-                      style: ButtonStyle(
-                        shape: WidgetStateProperty.all(RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10))),
-                        textStyle: WidgetStateProperty.all(
-                            GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500)),
-                      ),
-                    ),
+              InkWell(
+                onTap: () => _exportReports(context, ref),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: cs.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  OutlinedButton.icon(
-                    onPressed: () => _exportReports(context, ref),
-                    icon: const Icon(Icons.download_rounded, size: 18),
-                    label: const Text('Export'),
-                    style: OutlinedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ],
+                  child: Icon(Icons.ios_share_rounded, size: 20, color: cs.primary),
+                ),
               ),
             ],
+          ),
+          const SizedBox(height: 20),
+
+          // ─── Filter Row (Apple Style Pills) ───
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              children: [
+                _FilterChip(
+                  label: 'Today',
+                  filter: AnalyticsDateFilter.today,
+                  currentFilter: currentFilter,
+                  ref: ref,
+                  context: context,
+                ),
+                _FilterChip(
+                  label: 'This Month',
+                  filter: AnalyticsDateFilter.thisMonth,
+                  currentFilter: currentFilter,
+                  ref: ref,
+                  context: context,
+                ),
+                _FilterChip(
+                  label: 'This Year',
+                  filter: AnalyticsDateFilter.thisYear,
+                  currentFilter: currentFilter,
+                  ref: ref,
+                  context: context,
+                ),
+                _FilterChip(
+                  label: 'All Time',
+                  filter: AnalyticsDateFilter.allTime,
+                  currentFilter: currentFilter,
+                  ref: ref,
+                  context: context,
+                ),
+                _FilterChip(
+                  label: 'Custom Range',
+                  filter: AnalyticsDateFilter.custom,
+                  currentFilter: currentFilter,
+                  ref: ref,
+                  context: context,
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 24),
 
@@ -131,9 +134,9 @@ class AnalyticsScreen extends ConsumerWidget {
                           physics: const NeverScrollableScrollPhysics(),
                           shrinkWrap: true,
                           crossAxisCount: 2,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                          childAspectRatio: 2.2,
+                          crossAxisSpacing: isPhone ? 12 : 16,
+                          mainAxisSpacing: isPhone ? 12 : 16,
+                          childAspectRatio: isPhone ? 1.15 : 2.2,
                           children: [
                             _SummaryCard(
                               title: "Revenue",
@@ -438,49 +441,157 @@ class _SummaryCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: cs.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-            blurRadius: 8,
+            color: color.withValues(alpha: isDark ? 0.05 : 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.03),
+            blurRadius: 4,
             offset: const Offset(0, 2),
           ),
         ],
         border: isDark
-            ? Border.all(color: Colors.white.withValues(alpha: 0.06), width: 0.5)
-            : null,
+            ? Border.all(color: Colors.white.withValues(alpha: 0.04), width: 0.5)
+            : Border.all(color: cs.onSurface.withValues(alpha: 0.03), width: 0.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, size: 18, color: color),
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, size: 20, color: color),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: GoogleFonts.inter(
+                    color: cs.onSurfaceVariant,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 14),
-          Text(title,
-              style: GoogleFonts.inter(
-                  color: cs.onSurfaceVariant, fontSize: 12)),
+          const SizedBox(height: 16),
+          Text(
+            value,
+            style: GoogleFonts.inter(
+              color: cs.onSurface,
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.5,
+            ),
+            maxLines: 1,
+            // Removes scaling overflow issues
+            overflow: TextOverflow.ellipsis,
+          ),
           const SizedBox(height: 4),
-          Text(value,
-              style: GoogleFonts.inter(
-                  color: color,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.4)),
-          const SizedBox(height: 4),
-          Text(subtitle,
-              style: GoogleFonts.inter(
-                  color: cs.onSurfaceVariant, fontSize: 11)),
+          Text(
+            subtitle,
+            style: GoogleFonts.inter(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final AnalyticsDateFilter filter;
+  final AnalyticsDateFilter currentFilter;
+  final WidgetRef ref;
+  final BuildContext context;
+
+  const _FilterChip({
+    required this.label,
+    required this.filter,
+    required this.currentFilter,
+    required this.ref,
+    required this.context,
+  });
+
+  @override
+  Widget build(BuildContext _) {
+    final cs = Theme.of(context).colorScheme;
+    final isSelected = filter == currentFilter;
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () async {
+            if (filter == AnalyticsDateFilter.custom) {
+              final range = await showDateRangePicker(
+                context: context,
+                firstDate: DateTime(2020),
+                lastDate: DateTime(2030),
+              );
+              if (range != null) {
+                ref.read(analyticsCustomDateRangeProvider.notifier).state = range;
+                ref.read(analyticsDateFilterProvider.notifier).state = filter;
+              }
+            } else {
+              ref.read(analyticsDateFilterProvider.notifier).state = filter;
+            }
+          },
+          borderRadius: BorderRadius.circular(20),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: isSelected ? cs.primary : cs.surface,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isSelected ? cs.primary : cs.onSurfaceVariant.withValues(alpha: 0.2),
+                width: 1,
+              ),
+              boxShadow: isSelected
+                  ? [
+                      BoxShadow(
+                        color: cs.primary.withValues(alpha: 0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      )
+                    ]
+                  : [],
+            ),
+            child: Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                color: isSelected ? cs.onPrimary : cs.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

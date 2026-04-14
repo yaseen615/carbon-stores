@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/utils/responsive_helper.dart';
 import '../../../providers/product_providers.dart';
 
 import 'product_tile.dart';
@@ -12,6 +13,7 @@ class ProductGrid extends ConsumerWidget {
     final productsAsync = ref.watch(productsStreamProvider);
     final filtered = ref.watch(filteredProductsProvider);
     final cs = Theme.of(context).colorScheme;
+    final isPhone = Responsive.isPhone(context);
 
     return productsAsync.when(
       loading: () => Center(
@@ -53,7 +55,7 @@ class ProductGrid extends ConsumerWidget {
             separatorBuilder: (context, index) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
               return SizedBox(
-                height: 110, // Fixed height for list item
+                height: isPhone ? 100 : 110,
                 child: ProductTile(product: filtered[index], isListView: true),
               );
             },
@@ -62,12 +64,19 @@ class ProductGrid extends ConsumerWidget {
 
         return GridView.builder(
           padding: const EdgeInsets.only(bottom: 24),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 180,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            childAspectRatio: 0.8, // Decreased to clear 2.9px vertical overflow of product text
-          ),
+          gridDelegate: isPhone
+              ? const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 0.75,
+                )
+              : const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 180,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  childAspectRatio: 0.8,
+                ),
           itemCount: filtered.length,
           itemBuilder: (context, index) {
             return ProductTile(product: filtered[index]);

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/pos_colors.dart';
 import '../../core/utils/currency_formatter.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../data/models/transaction_model.dart';
 import '../../providers/transaction_providers.dart';
@@ -25,40 +26,44 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     final pos = context.pos;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    final isDesktop = Responsive.isTabletOrDesktop(context);
+    final isPhone = Responsive.isPhone(context);
+    final topPadding = isPhone ? MediaQuery.paddingOf(context).top + 16 : 20.0;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+      padding: EdgeInsets.fromLTRB(isDesktop ? 24 : 16, topPadding, isDesktop ? 24 : 16, isPhone ? 8 : 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ─── Header ───
-          Row(
-            children: [
-              Text('Transactions',
-                  style: GoogleFonts.inter(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.4)),
-              const Spacer(),
-              SizedBox(
-                width: 300,
-                child: TextField(
-                  onChanged: (val) => setState(() => _searchQuery = val),
-                  style: GoogleFonts.inter(fontSize: 14),
-                  decoration: InputDecoration(
-                    hintText: 'Search receipt or student...',
-                    hintStyle: GoogleFonts.inter(
-                        fontSize: 14,
-                        color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
-                    prefixIcon: Icon(Icons.search_rounded,
-                        size: 18,
-                        color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 0),
-                  ),
+          if (isDesktop)
+            Row(
+              children: [
+                Text('Transactions',
+                    style: GoogleFonts.inter(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.4)),
+                const Spacer(),
+                SizedBox(
+                  width: 300,
+                  child: _buildSearchField(cs),
                 ),
-              ),
-            ],
-          ),
+              ],
+            )
+          else
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Transactions',
+                    style: GoogleFonts.inter(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.4)),
+                const SizedBox(height: 12),
+                _buildSearchField(cs),
+              ],
+            ),
           const SizedBox(height: 20),
 
           // ─── List ───
@@ -94,12 +99,14 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                 }
 
                 return ListView.separated(
-                  padding: const EdgeInsets.only(bottom: 24),
+                  padding: EdgeInsets.only(bottom: isPhone ? 80 : 24),
                   itemCount: filtered.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 10),
                   itemBuilder: (context, index) {
                     return _TransactionCard(
-                        transaction: filtered[index], isDark: isDark);
+                        key: ValueKey(filtered[index].id),
+                        transaction: filtered[index],
+                        isDark: isDark);
                   },
                 );
               },
@@ -115,13 +122,31 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
       ),
     );
   }
+
+  Widget _buildSearchField(ColorScheme cs) {
+    return TextField(
+      onChanged: (val) => setState(() => _searchQuery = val),
+      style: GoogleFonts.inter(fontSize: 14),
+      decoration: InputDecoration(
+        hintText: 'Search receipt or student...',
+        hintStyle: GoogleFonts.inter(
+            fontSize: 14,
+            color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+        prefixIcon: Icon(Icons.search_rounded,
+            size: 18,
+            color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+        contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16, vertical: 0),
+      ),
+    );
+  }
 }
 
 class _TransactionCard extends StatefulWidget {
   final StoreTransaction transaction;
   final bool isDark;
 
-  const _TransactionCard({required this.transaction, required this.isDark});
+  const _TransactionCard({super.key, required this.transaction, required this.isDark});
 
   @override
   State<_TransactionCard> createState() => _TransactionCardState();
@@ -229,9 +254,15 @@ class _TransactionCardState extends State<_TransactionCard>
                   children: [
                     Row(
                       children: [
-                        Text(txn.receiptId,
+                        Flexible(
+                          child: Text(
+                            txn.receiptId,
                             style: GoogleFonts.inter(
-                                fontWeight: FontWeight.w600, fontSize: 14)),
+                                fontWeight: FontWeight.w600, fontSize: 14),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                         if (txn.isVoided) ...[
                           const SizedBox(width: 8),
                           Container(

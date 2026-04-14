@@ -81,7 +81,11 @@ class _AppModalWrapper extends StatelessWidget {
                 child: ScaleTransition(
                   scale: scaleAnimation,
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: maxWidth),
+                    constraints: BoxConstraints(
+                      maxWidth: MediaQuery.sizeOf(context).width < (maxWidth + 32) 
+                        ? MediaQuery.sizeOf(context).width - 32 
+                        : maxWidth
+                    ),
                     child: Material(
                       color: Colors.transparent,
                       child: child,
@@ -121,7 +125,12 @@ class AppModalContent extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
-      constraints: BoxConstraints(maxWidth: maxWidth),
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width < (maxWidth + 32)
+          ? MediaQuery.sizeOf(context).width - 32
+          : maxWidth,
+        maxHeight: MediaQuery.sizeOf(context).height - 64, // Vertically constrained
+      ),
       decoration: BoxDecoration(
         color: cs.surface,
         borderRadius: BorderRadius.circular(20),
@@ -158,8 +167,17 @@ class AppModalContent extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 24),
-            // Content
-            ...children,
+            // Content (Scrollable)
+            Flexible(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: children,
+                ),
+              ),
+            ),
           ],
         ),
       ),
