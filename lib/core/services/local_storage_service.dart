@@ -136,23 +136,55 @@ class LocalStorageService {
 
   /// Import backup
   Future<int> importBackup() async {
-    FilePickerResult? result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['zip'],
-      withData: true, // Required for Web
-    );
+    try {
+      FilePickerResult? result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['zip'],
+        withData: true, // Required for Web + Android content:// URIs
+      );
 
-    if (result != null && (result.files.single.path != null || result.files.single.bytes != null)) {
-      final bytes = result.files.single.bytes ?? await File(result.files.single.path!).readAsBytes();
+      if (result == null || result.files.isEmpty) {
+        debugPrint('[ImageImport] No file selected');
+        return 0;
+      }
+
+      final pickedFile = result.files.single;
+      Uint8List? bytes = pickedFile.bytes;
+
+      // On Android, bytes may be null even with withData: true for large files.
+      // Fall back to reading from the file path if available.
+      if (bytes == null && pickedFile.path != null) {
+        try {
+          bytes = await File(pickedFile.path!).readAsBytes();
+        } catch (e) {
+          debugPrint('[ImageImport] Failed to read file from path: $e');
+          return 0;
+        }
+      }
+
+      if (bytes == null || bytes.isEmpty) {
+        debugPrint('[ImageImport] No bytes available from picked file');
+        return 0;
+      }
+
+      debugPrint('[ImageImport] Read ${bytes.length} bytes from zip');
+
       final archive = ZipDecoder().decodeBytes(bytes);
       int restoredCount = 0;
+
+      debugPrint('[ImageImport] Archive contains ${archive.length} entries');
 
       if (kIsWeb) {
         final prefs = await SharedPreferences.getInstance();
         for (final file in archive) {
           if (file.isFile) {
             final data = file.content as List<int>;
-            await prefs.setString(file.name, base64Encode(data));
+            // Ensure web keys have img_ prefix
+            var key = file.name;
+            if (!key.startsWith('img_')) {
+              key = 'img_$key';
+            }
+            await prefs.setString(key, base64Encode(data));
             restoredCount++;
           }
         }
@@ -166,19 +198,31 @@ class LocalStorageService {
         for (final file in archive) {
           if (file.isFile) {
             final data = file.content as List<int>;
-            // Adjust prefix for compatibility
+            // Strip img_ prefix if present (web exports use it, native doesn't)
             var fileName = file.name;
             if (fileName.startsWith('img_')) {
               fileName = fileName.replaceFirst('img_', '');
             }
+            // Also strip any directory path components from zip entries
+            if (fileName.contains('/')) {
+              fileName = fileName.split('/').last;
+            }
+            if (fileName.isEmpty) continue;
+
             final localFile = File('${imagesDir.path}/$fileName');
             await localFile.writeAsBytes(data);
+            debugPrint('[ImageImport] Restored: $fileName (${data.length} bytes)');
             restoredCount++;
           }
         }
       }
+
+      debugPrint('[ImageImport] Total restored: $restoredCount');
       return restoredCount;
+    } catch (e, stack) {
+      debugPrint('[ImageImport] Error during import: $e');
+      debugPrint('[ImageImport] Stack: $stack');
+      rethrow;
     }
-    return 0;
   }
 }
