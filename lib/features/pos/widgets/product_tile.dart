@@ -139,7 +139,6 @@ class _ProductTileState extends ConsumerState<ProductTile>
                   children: [
                     // Image block with Stack for trailing FAB
                     Expanded(
-                      flex: 6,
                       child: Stack(
                         clipBehavior: Clip.none,
                         children: [
@@ -251,42 +250,43 @@ class _ProductTileState extends ConsumerState<ProductTile>
                     ),
                     
                     // Text Content block
-                    Expanded(
-                      flex: 4,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 20, 12, 12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              widget.product.name,
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: cs.onSurface,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 18, 12, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            widget.product.name,
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: cs.onSurface,
                             ),
-                            const SizedBox(height: 2),
-                            Row(
-                              children: [
-                                Text(
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
                                   CurrencyFormatter.format(widget.product.price),
                                   style: GoogleFonts.inter(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w500,
                                     color: cs.onSurfaceVariant.withValues(alpha: 0.7),
                                   ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                const Spacer(),
-                                if (!widget.product.isOutOfStock)
-                                   _StockBadge(product: widget.product),
+                              ),
+                              if (!widget.product.isOutOfStock) ...[
+                                const SizedBox(width: 4),
+                                _StockBadge(product: widget.product),
                               ],
-                            ),
-                          ],
-                        ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                   ],
