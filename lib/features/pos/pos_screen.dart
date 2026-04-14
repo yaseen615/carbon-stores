@@ -29,6 +29,25 @@ class PosScreen extends ConsumerWidget {
           ),
         ),
         const SizedBox(width: 12),
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: cs.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+                color: cs.onSurfaceVariant.withValues(alpha: 0.1)),
+          ),
+          child: IconButton(
+            icon: const Icon(Icons.refresh_rounded, size: 22),
+            color: cs.onSurfaceVariant,
+            tooltip: 'Refresh Products',
+            onPressed: () {
+              ref.invalidate(productsStreamProvider);
+            },
+          ),
+        ),
+        const SizedBox(width: 12),
         Consumer(builder: (context, ref, child) {
           final isListView = ref.watch(isProductListViewProvider);
           return Container(
@@ -47,6 +66,7 @@ class PosScreen extends ConsumerWidget {
                       : Icons.list_alt_rounded,
                   size: 22),
               color: cs.onSurfaceVariant,
+              tooltip: isListView ? 'Grid View' : 'List View',
               onPressed: () {
                 ref.read(isProductListViewProvider.notifier).state =
                     !isListView;
