@@ -34,9 +34,12 @@ class LocalStorageService {
 
   /// Get image bytes (Base64 on Web, File on Native)
   Future<Uint8List?> getProductImageBytes(String imageId, {bool isWeb = kIsWeb}) async {
+    // Normalise imageId: if it starts with img_, strip it for native lookups
+    final cleanId = imageId.startsWith('img_') ? imageId.substring(4) : imageId;
+
     if (isWeb) {
       final prefs = await SharedPreferences.getInstance();
-      final base64String = prefs.getString('img_$imageId');
+      final base64String = prefs.getString('img_$cleanId') ?? prefs.getString(cleanId);
       if (base64String != null) {
         return base64Decode(base64String);
       }
@@ -45,12 +48,25 @@ class LocalStorageService {
 
     try {
       final docDir = await getApplicationDocumentsDirectory();
-      final file = File('${docDir.path}/$_imagesDirName/$imageId');
+      
+      // Try clean ID first (native standard)
+      var file = File('${docDir.path}/$_imagesDirName/$cleanId');
+      
+      if (!await file.exists()) {
+        // Fallback: Try with img_ prefix (legacy or imported standard)
+        file = File('${docDir.path}/$_imagesDirName/img_$cleanId');
+      }
+      
+      debugPrint('[ImageLoad] Attempting to read: ${file.path}');
       if (await file.exists()) {
-        return await file.readAsBytes();
+        final bytes = await file.readAsBytes();
+        debugPrint('[ImageLoad] Success: read ${bytes.length} bytes for $imageId');
+        return bytes;
+      } else {
+        debugPrint('[ImageLoad] File does NOT exist: ${file.path}');
       }
     } catch (e) {
-      debugPrint('Error reading image: $e');
+      debugPrint('[ImageLoad] Error reading image: $e');
     }
     return null;
   }
@@ -229,12 +245,17 @@ class LocalStorageService {
           if (file.isFile) {
             final data = file.content as List<int>;
             var name = file.name;
-            if (name.startsWith('img_')) {
-              name = name.replaceFirst('img_', '');
-            }
+            
+            // First, strip any directory path components from zip entries
             if (name.contains('/')) {
               name = name.split('/').last;
             }
+            
+            // Then strip img_ prefix if present (web exports use it, native doesn't)
+            if (name.startsWith('img_')) {
+              name = name.replaceFirst('img_', '');
+            }
+            
             if (name.isEmpty) continue;
 
             final localFile = File('${imagesDir.path}/$name');
