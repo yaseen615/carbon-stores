@@ -151,8 +151,13 @@ class LocalStorageService {
   }
 
   /// Import backup — returns a result with count and message for UI feedback.
-  Future<ImportResult> importBackup() async {
+  /// Accepts an optional [onProgress] callback to update the UI with the current status.
+  Future<ImportResult> importBackup({
+    void Function(int current, int total, String status)? onProgress,
+  }) async {
     try {
+      onProgress?.call(0, 0, 'Waiting for file selection...');
+
       // Use FileType.any on mobile — FileType.custom with 'zip' is unreliable
       // on many Android file managers (SAF doesn't respect extension filters).
       FilePickerResult? result = await FilePicker.pickFiles(
@@ -176,6 +181,7 @@ class LocalStorageService {
         );
       }
 
+      onProgress?.call(0, 0, 'Reading file contents...');
       Uint8List? bytes = pickedFile.bytes;
 
       // On Android, bytes may be null even with withData: true for large files.
@@ -202,6 +208,11 @@ class LocalStorageService {
 
       debugPrint('[ImageImport] Read ${bytes.length} bytes from ${pickedFile.name}');
 
+      onProgress?.call(0, 0, 'Extracting zip archive...');
+      // Decoding a large zip can block the UI for a bit, but ZipDecoder is synchronous.
+      // We will yield briefly beforehand.
+      await Future.delayed(const Duration(milliseconds: 10));
+      
       final Archive archive;
       try {
         archive = ZipDecoder().decodeBytes(bytes);
@@ -218,8 +229,16 @@ class LocalStorageService {
       if (archive.isEmpty) {
         return const ImportResult(count: 0, message: 'Zip file contains no images.');
       }
+      
+      // Count actual files (ignore directories)
+      final totalFiles = archive.where((f) => f.isFile).length;
+
+      if (totalFiles == 0) {
+        return const ImportResult(count: 0, message: 'Zip file contains no image files.');
+      }
 
       int restoredCount = 0;
+      onProgress?.call(0, totalFiles, 'Importing 0 of $totalFiles images...');
 
       if (kIsWeb) {
         final prefs = await SharedPreferences.getInstance();
@@ -232,6 +251,8 @@ class LocalStorageService {
             }
             await prefs.setString(key, base64Encode(data));
             restoredCount++;
+            onProgress?.call(restoredCount, totalFiles, 'Importing $restoredCount of $totalFiles images...');
+            if (restoredCount % 5 == 0) await Future.delayed(Duration.zero);
           }
         }
       } else {
@@ -262,6 +283,10 @@ class LocalStorageService {
             await localFile.writeAsBytes(data);
             debugPrint('[ImageImport] Restored: $name (${data.length} bytes)');
             restoredCount++;
+            onProgress?.call(restoredCount, totalFiles, 'Importing $restoredCount of $totalFiles images...');
+            
+            // Allow UI to repaint
+            if (restoredCount % 5 == 0) await Future.delayed(Duration.zero);
           }
         }
       }

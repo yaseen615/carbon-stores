@@ -959,19 +959,87 @@ class _SettingsModalContent extends ConsumerWidget {
   }
 
   void _importImages(BuildContext context) async {
-    Navigator.pop(context);
-    
-    // Show loading indicator
+    Navigator.pop(context); // Close drawer
+
+    final progressNotifier = ValueNotifier<String>('Waiting for file...');
+    final progressValueNotifier = ValueNotifier<double>(0.0);
+    bool dialogShown = false;
+
+    // Show initial picker snackbar just to acknowledge click
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Picking file...')),
+      const SnackBar(
+        content: Text('Picking backup file...'),
+        duration: Duration(seconds: 2),
+      ),
     );
 
-    final result = await LocalStorageService().importBackup();
+    final result = await LocalStorageService().importBackup(
+      onProgress: (current, total, status) {
+        if (!dialogShown && status != 'Waiting for file selection...') {
+          dialogShown = true;
+          // As soon as file is picked, show blocking progress dialog
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (ctx) {
+              final cs = Theme.of(ctx).colorScheme;
+              return Dialog(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                elevation: 0,
+                backgroundColor: cs.surface,
+                child: Padding(
+                  padding: const EdgeInsets.all(28),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(color: cs.primary),
+                      const SizedBox(height: 24),
+                      ValueListenableBuilder<String>(
+                        valueListenable: progressNotifier,
+                        builder: (context, val, _) => Text(
+                          val,
+                          style: GoogleFonts.inter(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: cs.onSurface,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ValueListenableBuilder<double>(
+                        valueListenable: progressValueNotifier,
+                        builder: (context, val, _) => ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: val > 0 ? val : null,
+                            minHeight: 8,
+                            backgroundColor: cs.onSurfaceVariant.withValues(alpha: 0.2),
+                            valueColor: AlwaysStoppedAnimation(cs.primary),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        }
+
+        // Update values
+        progressNotifier.value = status;
+        if (total > 0) {
+          progressValueNotifier.value = current / total;
+        }
+      },
+    );
 
     if (!context.mounted) return;
 
-    // Clear loading snackbar
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    if (dialogShown) {
+      Navigator.of(context, rootNavigator: true).pop(); // Close progress dialog
+    }
 
     final cs = Theme.of(context).colorScheme;
     final pos = context.pos;
