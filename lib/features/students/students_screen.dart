@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -25,6 +26,7 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
   bool _isRefreshing = false;
   final ScrollController _scrollController = ScrollController();
   String _searchQuery = '';
+  Timer? _debounce;
 
   @override
   void initState() {
@@ -47,6 +49,7 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -391,8 +394,12 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
                       hintText: 'Search by name or ID...',
                       onChanged: (query) {
                         setState(() => _searchQuery = query);
-                        ref.read(studentSearchQueryProvider.notifier).state =
-                            query;
+                        // Debounce Firestore queries — 300ms after user stops typing
+                        _debounce?.cancel();
+                        _debounce = Timer(const Duration(milliseconds: 300), () {
+                          ref.read(studentSearchQueryProvider.notifier).state =
+                              query;
+                        });
                       },
                     ),
                   ),

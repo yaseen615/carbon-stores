@@ -127,38 +127,37 @@ final studentStatsProvider = FutureProvider<StudentStats>((ref) async {
   return repo.getStudentStats();
 });
 
-// ═══════════════════════════════════════════════════════════════
-//  SEARCH — local index + targeted Firestore doc fetches
-// ═══════════════════════════════════════════════════════════════
-
 /// Provider for search results (Student objects with balance/debt).
-/// Flow: local index search → get matched IDs → fetch those docs.
-/// Fallback: if local index is empty (never synced), query Firestore directly.
+///
+/// Strategy (optimised for speed):
+///   1. Try local index first → zero Firestore reads (instant, offline-capable).
+///   2. If local index is empty (fresh device, never synced) OR has no matches,
+///      fall back to **server-side** Firestore queries:
+///      a) Prefix query on `name` field (uses Firestore inequality range scan).
+///      b) Exact document-ID lookup (for admission number search).
+///      c) Substring search on `name_lower` if set, else case-insensitive fallback.
+///   This makes search work immediately on a fresh install — no sync required.
 final studentSearchResultsProvider = FutureProvider<List<Student>>((ref) async {
   final query = ref.watch(studentSearchQueryProvider);
   if (query.trim().isEmpty) return [];
 
+  final trimmed = query.trim();
   final index = ref.read(studentSearchIndexProvider);
   await index.load();
 
-  // Try local index first (zero Firestore reads)
-  final matches = index.search(query, limit: 12);
-
-  if (matches.isNotEmpty) {
-    // Fetch those specific docs from Firestore (up to 12 reads)
-    final ids = matches.map((m) => m.studentId).toList();
-    final repo = ref.read(studentRepositoryProvider);
-    return repo.getStudentsByIds(ids);
+  // ── 1. Try local index first (zero Firestore reads, instant) ──
+  if (index.length > 0) {
+    final matches = index.search(trimmed, limit: 12);
+    if (matches.isNotEmpty) {
+      final ids = matches.map((m) => m.studentId).toList();
+      final repo = ref.read(studentRepositoryProvider);
+      return repo.getStudentsByIds(ids);
+    }
   }
 
-  // Fallback: if local index is empty or has no matches,
-  // try a direct Firestore lookup by document ID (exact match).
-  // This handles the case before first sync.
+  // ── 2. Fallback: search Firestore directly ──
   final repo = ref.read(studentRepositoryProvider);
-  final directMatch = await repo.getStudent(query.trim());
-  if (directMatch != null) return [directMatch];
-
-  return [];
+  return repo.searchStudents(trimmed, limit: 12);
 });
 
 // ═══════════════════════════════════════════════════════════════

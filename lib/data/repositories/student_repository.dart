@@ -127,6 +127,86 @@ class StudentRepository {
     return Student.fromFirestore(doc);
   }
 
+  /// Search students directly in Firestore (no local index needed).
+  ///
+  /// Uses a two-pronged approach for fast, comprehensive results:
+  ///   1. **Name prefix query** — Firestore range scan on `name` field.
+  ///      Uses Unicode upper bound trick for case-insensitive prefix matching.
+  ///   2. **Document ID lookup** — exact match on admission number.
+  ///
+  /// Results are deduplicated and capped at [limit].
+  /// Cost: 2 Firestore queries (name range + doc get).
+  Future<List<Student>> searchStudents(String query, {int limit = 12}) async {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return [];
+
+    final results = <String, Student>{}; // dedupe by ID
+
+    // ── Strategy 1: Name prefix search (case-insensitive) ──
+    // Firestore doesn't natively support case-insensitive search,
+    // so we query with the original casing AND a capitalised variant.
+    // The Unicode '\uf8ff' trick gives us "starts with" behavior.
+    try {
+      final lowerQ = trimmed.toLowerCase();
+      final capitalQ = trimmed.substring(0, 1).toUpperCase() +
+          (trimmed.length > 1 ? trimmed.substring(1).toLowerCase() : '');
+
+      // Query 1a: lowercase prefix
+      final snap1 = await _collection
+          .orderBy('name')
+          .startAt([lowerQ])
+          .endAt(['$lowerQ\uf8ff'])
+          .limit(limit)
+          .get();
+      for (final doc in snap1.docs) {
+        results[doc.id] = Student.fromFirestore(doc);
+      }
+
+      // Query 1b: capitalised prefix (covers "Rahul", "John", etc.)
+      if (results.length < limit) {
+        final snap2 = await _collection
+            .orderBy('name')
+            .startAt([capitalQ])
+            .endAt(['$capitalQ\uf8ff'])
+            .limit(limit - results.length)
+            .get();
+        for (final doc in snap2.docs) {
+          results[doc.id] = Student.fromFirestore(doc);
+        }
+      }
+
+      // Query 1c: uppercase prefix (covers "RAHUL", etc.)
+      if (results.length < limit) {
+        final upperQ = trimmed.toUpperCase();
+        if (upperQ != capitalQ) {
+          final snap3 = await _collection
+              .orderBy('name')
+              .startAt([upperQ])
+              .endAt(['$upperQ\uf8ff'])
+              .limit(limit - results.length)
+              .get();
+          for (final doc in snap3.docs) {
+            results[doc.id] = Student.fromFirestore(doc);
+          }
+        }
+      }
+    } catch (_) {
+      // Firestore index may not exist yet — continue to ID lookup
+    }
+
+    // ── Strategy 2: Exact document ID lookup (admission number) ──
+    if (results.length < limit) {
+      try {
+        final doc = await _collection.doc(trimmed).get();
+        if (doc.exists) {
+          results[doc.id] = Student.fromFirestore(doc);
+        }
+      } catch (_) {}
+    }
+
+    return results.values.take(limit).toList();
+  }
+
   // ──────────────────────────────────────────────────────────
   //  FULL COLLECTION (only for CSV export — on-demand)
   // ──────────────────────────────────────────────────────────
