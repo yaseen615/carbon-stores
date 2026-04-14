@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/pos_colors.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../core/utils/date_formatter.dart';
+import '../../../core/utils/responsive_helper.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../data/models/student_model.dart';
 import '../../../data/repositories/student_repository.dart';
@@ -40,29 +41,23 @@ class _StudentDetailDialogState extends ConsumerState<StudentDetailDialog> {
     final cs = Theme.of(context).colorScheme;
     final pos = context.pos;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isPhone = Responsive.isPhone(context);
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      elevation: 0,
-      backgroundColor: cs.surface,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 800, maxHeight: 600),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // ─── Left Side: Student Info ───
-            Container(
-              width: 320,
-              padding: const EdgeInsets.all(32),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.03)
-                    : Colors.black.withValues(alpha: 0.02),
-                borderRadius:
-                    const BorderRadius.horizontal(left: Radius.circular(20)),
-              ),
-              child: Column(
-                children: [
+    // ─── Left Side: Student Info ───
+    final leftSide = Container(
+      width: isPhone ? double.infinity : 320,
+      padding: EdgeInsets.all(isPhone ? 24 : 32),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.03)
+            : Colors.black.withValues(alpha: 0.02),
+        borderRadius: isPhone
+            ? const BorderRadius.vertical(top: Radius.circular(20))
+            : const BorderRadius.horizontal(left: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: isPhone ? MainAxisSize.min : MainAxisSize.max,
+        children: [
                   // Circular avatar
                   Container(
                     width: 80,
@@ -179,7 +174,7 @@ class _StudentDetailDialogState extends ConsumerState<StudentDetailDialog> {
                     color: pos.error,
                   ),
 
-                  const Spacer(),
+                  if (isPhone) const SizedBox(height: 24) else const Spacer(),
 
                   // Delete Button
                   SizedBox(
@@ -202,15 +197,15 @@ class _StudentDetailDialogState extends ConsumerState<StudentDetailDialog> {
                   ),
                 ],
               ),
-            ),
+            );
 
-            // ─── Right Side: Purchase History ───
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(28),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+    // ─── Right Side: Purchase History ───
+    final rightSide = Expanded(
+      child: Padding(
+        padding: EdgeInsets.all(isPhone ? 24 : 28),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -387,8 +382,29 @@ class _StudentDetailDialogState extends ConsumerState<StudentDetailDialog> {
                     ),
                   ],
                 ),
-              ),
-            ),
+      ),
+    );
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      elevation: 0,
+      backgroundColor: cs.surface,
+      insetPadding: EdgeInsets.all(isPhone ? 16 : 24),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 800,
+          maxHeight: isPhone ? MediaQuery.sizeOf(context).height * 0.85 : 600,
+        ),
+        child: Flex(
+          direction: isPhone ? Axis.vertical : Axis.horizontal,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            leftSide,
+            if (isPhone)
+              Divider(height: 1, color: pos.divider)
+            else
+              Container(width: 1, color: pos.divider),
+            rightSide,
           ],
         ),
       ),
