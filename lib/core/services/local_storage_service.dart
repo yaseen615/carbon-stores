@@ -134,52 +134,82 @@ class LocalStorageService {
     return null;
   }
 
-  /// Import backup
-  Future<int> importBackup() async {
+  /// Import backup — returns a result with count and message for UI feedback.
+  Future<ImportResult> importBackup() async {
     try {
+      // Use FileType.any on mobile — FileType.custom with 'zip' is unreliable
+      // on many Android file managers (SAF doesn't respect extension filters).
       FilePickerResult? result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['zip'],
-        withData: true, // Required for Web + Android content:// URIs
+        type: FileType.any,
+        withData: true,
       );
 
       if (result == null || result.files.isEmpty) {
-        debugPrint('[ImageImport] No file selected');
-        return 0;
+        return const ImportResult(count: 0, message: 'No file selected.');
       }
 
       final pickedFile = result.files.single;
+
+      // Validate that user picked a zip file
+      final fileName = pickedFile.name.toLowerCase();
+      if (!fileName.endsWith('.zip')) {
+        return ImportResult(
+          count: 0,
+          message: 'Please select a .zip file. Selected: ${pickedFile.name}',
+          isError: true,
+        );
+      }
+
       Uint8List? bytes = pickedFile.bytes;
 
       // On Android, bytes may be null even with withData: true for large files.
-      // Fall back to reading from the file path if available.
       if (bytes == null && pickedFile.path != null) {
         try {
           bytes = await File(pickedFile.path!).readAsBytes();
         } catch (e) {
-          debugPrint('[ImageImport] Failed to read file from path: $e');
-          return 0;
+          debugPrint('[ImageImport] Failed to read from path: $e');
+          return ImportResult(
+            count: 0,
+            message: 'Could not read file: $e',
+            isError: true,
+          );
         }
       }
 
       if (bytes == null || bytes.isEmpty) {
-        debugPrint('[ImageImport] No bytes available from picked file');
-        return 0;
+        return const ImportResult(
+          count: 0,
+          message: 'Selected file appears to be empty.',
+          isError: true,
+        );
       }
 
-      debugPrint('[ImageImport] Read ${bytes.length} bytes from zip');
+      debugPrint('[ImageImport] Read ${bytes.length} bytes from ${pickedFile.name}');
 
-      final archive = ZipDecoder().decodeBytes(bytes);
-      int restoredCount = 0;
+      final Archive archive;
+      try {
+        archive = ZipDecoder().decodeBytes(bytes);
+      } catch (e) {
+        return ImportResult(
+          count: 0,
+          message: 'Invalid zip file. Could not decode: $e',
+          isError: true,
+        );
+      }
 
       debugPrint('[ImageImport] Archive contains ${archive.length} entries');
+
+      if (archive.isEmpty) {
+        return const ImportResult(count: 0, message: 'Zip file contains no images.');
+      }
+
+      int restoredCount = 0;
 
       if (kIsWeb) {
         final prefs = await SharedPreferences.getInstance();
         for (final file in archive) {
           if (file.isFile) {
             final data = file.content as List<int>;
-            // Ensure web keys have img_ prefix
             var key = file.name;
             if (!key.startsWith('img_')) {
               key = 'img_$key';
@@ -198,31 +228,54 @@ class LocalStorageService {
         for (final file in archive) {
           if (file.isFile) {
             final data = file.content as List<int>;
-            // Strip img_ prefix if present (web exports use it, native doesn't)
-            var fileName = file.name;
-            if (fileName.startsWith('img_')) {
-              fileName = fileName.replaceFirst('img_', '');
+            var name = file.name;
+            if (name.startsWith('img_')) {
+              name = name.replaceFirst('img_', '');
             }
-            // Also strip any directory path components from zip entries
-            if (fileName.contains('/')) {
-              fileName = fileName.split('/').last;
+            if (name.contains('/')) {
+              name = name.split('/').last;
             }
-            if (fileName.isEmpty) continue;
+            if (name.isEmpty) continue;
 
-            final localFile = File('${imagesDir.path}/$fileName');
+            final localFile = File('${imagesDir.path}/$name');
             await localFile.writeAsBytes(data);
-            debugPrint('[ImageImport] Restored: $fileName (${data.length} bytes)');
+            debugPrint('[ImageImport] Restored: $name (${data.length} bytes)');
             restoredCount++;
           }
         }
       }
 
       debugPrint('[ImageImport] Total restored: $restoredCount');
-      return restoredCount;
+
+      if (restoredCount == 0) {
+        return const ImportResult(count: 0, message: 'Zip file had no image files to restore.');
+      }
+
+      return ImportResult(
+        count: restoredCount,
+        message: 'Successfully restored $restoredCount image${restoredCount == 1 ? '' : 's'}!',
+      );
     } catch (e, stack) {
-      debugPrint('[ImageImport] Error during import: $e');
+      debugPrint('[ImageImport] Error: $e');
       debugPrint('[ImageImport] Stack: $stack');
-      rethrow;
+      return ImportResult(
+        count: 0,
+        message: 'Import failed: $e',
+        isError: true,
+      );
     }
   }
+}
+
+/// Result of an image import operation.
+class ImportResult {
+  final int count;
+  final String message;
+  final bool isError;
+
+  const ImportResult({
+    required this.count,
+    required this.message,
+    this.isError = false,
+  });
 }
