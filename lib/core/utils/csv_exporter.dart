@@ -27,7 +27,7 @@ class CsvExporter {
   }
 
   /// Export sales report
-  static Future<void> exportSalesReport(List<StoreTransaction> transactions) async {
+  static Future<void> exportSalesReport(List<StoreTransaction> transactions, {String sectionPrefix = 'All'}) async {
     final headers = ['Receipt ID', 'Date', 'Time', 'Items Summary', 'Payment Mode', 'Paid Amount', 'Debt Added', 'Student ID', 'Total Amount'];
     
     double totalPaid = 0;
@@ -58,21 +58,24 @@ class CsvExporter {
     rows.add(['', '', '', '', 'TOTAL PAID:', totalPaid.toStringAsFixed(2), '', '', '']);
     rows.add(['', '', '', '', 'TOTAL DEBT ADDED:', totalDebt.toStringAsFixed(2), '', '', '']);
 
-    await exportCsv(fileName: 'Sales_Report', headers: headers, rows: rows);
+    await exportCsv(fileName: 'Sales_Report_$sectionPrefix', headers: headers, rows: rows);
   }
 
   /// Export inventory report
-  static Future<void> exportInventoryReport(List<Product> products) async {
-    final headers = ['Product Name', 'Category', 'Price', 'Current Stock', 'Stock Status'];
+  static Future<void> exportInventoryReport(List<Product> products, {String sectionPrefix = 'All'}) async {
+    final headers = ['Product Name', 'Category', 'Supplier', 'Retail Price', 'Wholesale Price', 'Current Stock', 'Section', 'Stock Status'];
     final rows = products.map((p) => [
       p.name,
       p.category,
+      p.supplier.isNotEmpty ? p.supplier : 'N/A',
       p.price.toStringAsFixed(2),
+      p.wholesalePrice > 0 ? p.wholesalePrice.toStringAsFixed(2) : 'N/A',
       p.stock,
+      p.section,
       p.isOutOfStock ? 'Out of Stock' : p.isLowStock ? 'Low Stock' : 'In Stock',
     ]).toList();
     
-    await exportCsv(fileName: 'Inventory_Report', headers: headers, rows: rows);
+    await exportCsv(fileName: 'Inventory_Report_$sectionPrefix', headers: headers, rows: rows);
   }
 
   /// Export student report
@@ -104,7 +107,7 @@ class CsvExporter {
   }
 
   /// Export Expense report
-  static Future<void> exportExpenseReport(List<Expense> expenses) async {
+  static Future<void> exportExpenseReport(List<Expense> expenses, {String sectionPrefix = 'All'}) async {
     final headers = ['Date', 'Product Name', 'Qty', 'Unit Cost', 'Total Cost'];
     
     double total = 0;
@@ -121,13 +124,13 @@ class CsvExporter {
     }).toList();
 
     rows.add([]);
-    rows.add(['', '', '', '', '', 'TOTAL:', total.toStringAsFixed(2)]);
+    rows.add(['', '', '', 'TOTAL:', total.toStringAsFixed(2)]);
 
-    await exportCsv(fileName: 'Expense_Report', headers: headers, rows: rows);
+    await exportCsv(fileName: 'Expense_Report_$sectionPrefix', headers: headers, rows: rows);
   }
 
   /// Export Profit & Loss report
-  static Future<void> exportPandLReport(List<StoreTransaction> transactions, List<Expense> expenses) async {
+  static Future<void> exportPandLReport(List<StoreTransaction> transactions, List<Expense> expenses, {String sectionPrefix = 'All'}) async {
     // Grouping by Month (Year-Month key)
     final monthlyData = <String, Map<String, dynamic>>{};
     
@@ -193,6 +196,23 @@ class CsvExporter {
 
     // Use the first row as headers to avoid an empty first row in the CSV
     final headers = rows.removeAt(0).map((e) => e.toString()).toList();
-    await exportCsv(fileName: 'PandL_Report', headers: headers, rows: rows);
+    await exportCsv(fileName: 'PandL_Report_$sectionPrefix', headers: headers, rows: rows);
+  }
+
+  /// Export low stock report
+  static Future<void> exportLowStockReport(List<Product> products) async {
+    final headers = ['Product Name', 'Category', 'Supplier', 'Retail Price', 'Wholesale Price', 'Current Stock', 'Section', 'Stock Status'];
+    final rows = products.map((p) => [
+      p.name,
+      p.category,
+      p.supplier.isNotEmpty ? p.supplier : 'N/A',
+      p.price.toStringAsFixed(2),
+      p.wholesalePrice > 0 ? p.wholesalePrice.toStringAsFixed(2) : 'N/A',
+      p.stock,
+      p.section,
+      p.isOutOfStock ? 'Out of Stock' : 'Low Stock',
+    ]).toList();
+    
+    await exportCsv(fileName: 'Low_Stock_Report', headers: headers, rows: rows);
   }
 }

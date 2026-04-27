@@ -3,20 +3,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/pos_colors.dart';
 import '../../../core/utils/currency_formatter.dart';
-import '../../../providers/cart_providers.dart';
+import '../../../providers/multi_cart_provider.dart';
 
 import 'cart_item_row.dart';
 import 'student_info_card.dart';
 import 'payment_dialog.dart';
 
+/// Cart panel — clean, spacious layout optimized for 10" tablet.
+/// Customer session tabs have moved to the product area (pos_screen.dart).
 class CartPanel extends ConsumerWidget {
   const CartPanel({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final cart = ref.watch(cartProvider);
-    final cartTotal = ref.watch(cartTotalProvider);
-    final itemCount = ref.watch(cartItemCountProvider);
+    final multiCart = ref.watch(multiCartProvider);
+    final activeSession = multiCart.activeSession;
+    final cart = activeSession.items;
+    final cartTotal = activeSession.total;
+    final itemCount = activeSession.itemCount;
     final cs = Theme.of(context).colorScheme;
     final pos = context.pos;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -35,24 +39,39 @@ class CartPanel extends ConsumerWidget {
       ),
       child: Column(
         children: [
-          // ─── Header ───
+          // ─── Cart Header ───
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
             child: Row(
               children: [
+                // Cart icon
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: cs.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.shopping_cart_rounded,
+                    size: 18,
+                    color: cs.primary,
+                  ),
+                ),
+                const SizedBox(width: 12),
                 Text(
                   'Cart',
                   style: GoogleFonts.inter(
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
                     color: cs.onSurface,
-                    letterSpacing: -0.4,
+                    letterSpacing: -0.3,
                   ),
                 ),
                 if (itemCount > 0) ...[
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       color: cs.primary.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(999),
@@ -60,7 +79,7 @@ class CartPanel extends ConsumerWidget {
                     child: Text(
                       '$itemCount',
                       style: GoogleFonts.inter(
-                        fontSize: 12,
+                        fontSize: 13,
                         fontWeight: FontWeight.w700,
                         color: cs.primary,
                       ),
@@ -69,17 +88,23 @@ class CartPanel extends ConsumerWidget {
                 ],
                 const Spacer(),
                 if (cart.isNotEmpty)
-                  TextButton(
-                    onPressed: () => ref.read(cartProvider.notifier).clearCart(),
-                    style: TextButton.styleFrom(
-                      foregroundColor: pos.error,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      minimumSize: const Size(0, 36),
-                    ),
-                    child: Text(
-                      'Clear',
-                      style: GoogleFonts.inter(
-                          fontSize: 14, fontWeight: FontWeight.w600),
+                  Material(
+                    color: pos.error.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    child: InkWell(
+                      onTap: () => ref.read(multiCartProvider.notifier).clearCart(),
+                      borderRadius: BorderRadius.circular(10),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        child: Text(
+                          'Clear All',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: pos.error,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
               ],
@@ -102,16 +127,25 @@ class CartPanel extends ConsumerWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.shopping_bag_outlined,
-                          size: 48,
-                          color: cs.onSurfaceVariant.withValues(alpha: 0.15),
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            color: cs.onSurfaceVariant.withValues(alpha: 0.06),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.shopping_bag_outlined,
+                            size: 32,
+                            color: cs.onSurfaceVariant.withValues(alpha: 0.25),
+                          ),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 16),
                         Text(
                           'Cart is empty',
                           style: GoogleFonts.inter(
-                            fontSize: 15,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
                             color: cs.onSurfaceVariant.withValues(alpha: 0.5),
                           ),
                         ),
@@ -119,7 +153,7 @@ class CartPanel extends ConsumerWidget {
                         Text(
                           'Tap a product to add',
                           style: GoogleFonts.inter(
-                            fontSize: 13,
+                            fontSize: 14,
                             color: cs.onSurfaceVariant.withValues(alpha: 0.3),
                           ),
                         ),
@@ -128,13 +162,11 @@ class CartPanel extends ConsumerWidget {
                   )
                 : ListView.separated(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                     itemCount: cart.length,
                     separatorBuilder: (_, __) => Divider(
                       height: 1,
                       color: pos.divider,
-                      indent: 4,
-                      endIndent: 4,
                     ),
                     itemBuilder: (context, index) {
                       return CartItemRow(item: cart[index]);
@@ -164,22 +196,22 @@ class CartPanel extends ConsumerWidget {
                     value: CurrencyFormatter.format(cartTotal),
                     color: cs.onSurfaceVariant,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   _SummaryRow(
                     label: 'Tax (0%)',
                     value: CurrencyFormatter.format(0),
                     color: cs.onSurfaceVariant,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   _SummaryRow(
                     label: 'Discount',
                     value: '-${CurrencyFormatter.format(0)}',
                     color: pos.success,
                   ),
                   
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   Divider(height: 1, color: pos.divider),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -187,7 +219,7 @@ class CartPanel extends ConsumerWidget {
                       Text(
                         'Total',
                         style: GoogleFonts.inter(
-                          fontSize: 16,
+                          fontSize: 18,
                           fontWeight: FontWeight.w700,
                           color: cs.onSurface,
                         ),
@@ -195,40 +227,41 @@ class CartPanel extends ConsumerWidget {
                       Text(
                         CurrencyFormatter.format(cartTotal),
                         style: GoogleFonts.inter(
-                          fontSize: 24,
+                          fontSize: 26,
                           fontWeight: FontWeight.w700,
                           color: cs.onSurface,
-                          letterSpacing: -0.4,
+                          letterSpacing: -0.5,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
-                  // Checkout Button
+                  const SizedBox(height: 16),
+                  // Checkout Button — Large, Apple-style
                   SizedBox(
                     width: double.infinity,
-                    height: 56, // Larger height matching mockup
-                    child: ElevatedButton(
+                    height: 56,
+                    child: ElevatedButton.icon(
                       onPressed: () {
                         showDialog(
                           context: context,
                           builder: (ctx) => const PaymentDialog(),
                         );
                       },
+                      icon: const Icon(Icons.payment_rounded, size: 22),
+                      label: Text(
+                        'Checkout  •  ${CurrencyFormatter.format(cartTotal)}',
+                        style: GoogleFonts.inter(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: cs.primary, // Mockup has blue checkout
+                        backgroundColor: cs.primary,
                         foregroundColor: cs.onPrimary,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
                         ),
                         elevation: 0,
-                      ),
-                      child: Text(
-                        'Checkout',
-                        style: GoogleFonts.inter(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
                       ),
                     ),
                   ),
@@ -240,6 +273,8 @@ class CartPanel extends ConsumerWidget {
     );
   }
 }
+
+// ─── Summary Row ───
 
 class _SummaryRow extends StatelessWidget {
   final String label;

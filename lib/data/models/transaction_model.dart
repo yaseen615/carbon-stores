@@ -10,13 +10,16 @@ class StoreTransaction {
   final double paidAmount;
   final double walletAmount;
   final double cashAmount;
+  final double upiAmount;
   final double debtAmount;
   final String? studentId;
   final String? studentName;
+  final String section; // 'cafe' or 'store'
   final DateTime createdAt;
   final bool isVoided;
   final DateTime? voidedAt;
   final String? voidReason;
+  final DocumentSnapshot? snapshot;
 
   const StoreTransaction({
     required this.id,
@@ -27,13 +30,16 @@ class StoreTransaction {
     required this.paidAmount,
     this.walletAmount = 0,
     this.cashAmount = 0,
+    this.upiAmount = 0,
     required this.debtAmount,
+    this.section = 'store',
     this.studentId,
     this.studentName,
     required this.createdAt,
     this.isVoided = false,
     this.voidedAt,
     this.voidReason,
+    this.snapshot,
   });
 
   int get totalItems => items.fold(0, (total, item) => total + item.quantity);
@@ -57,13 +63,16 @@ class StoreTransaction {
       paidAmount: (data['paid_amount'] ?? 0).toDouble(),
       walletAmount: (data['wallet_amount'] ?? 0).toDouble(),
       cashAmount: (data['cash_amount'] ?? 0).toDouble(),
+      upiAmount: (data['upi_amount'] ?? 0).toDouble(),
       debtAmount: (data['debt_amount'] ?? 0).toDouble(),
       studentId: data['student_id'],
       studentName: data['student_name'],
+      section: data['section'] ?? 'store',
       createdAt: (data['created_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isVoided: data['is_voided'] ?? false,
       voidedAt: (data['voided_at'] as Timestamp?)?.toDate(),
       voidReason: data['void_reason'],
+      snapshot: doc,
     );
   }
 
@@ -76,7 +85,9 @@ class StoreTransaction {
       'paid_amount': paidAmount,
       'wallet_amount': walletAmount,
       'cash_amount': cashAmount,
+      'upi_amount': upiAmount,
       'debt_amount': debtAmount,
+      'section': section,
       'student_id': studentId,
       'student_name': studentName,
       'created_at': FieldValue.serverTimestamp(),

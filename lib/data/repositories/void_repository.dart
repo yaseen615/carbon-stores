@@ -31,6 +31,24 @@ class VoidRepository {
         studentDoc = await tx.get(studentRef);
       }
 
+      // Read external debtor doc if applicable (non-student debt)
+      DocumentSnapshot? externalDebtorDoc;
+      DocumentReference? externalDebtorRef;
+      if (transaction.studentId == null &&
+          transaction.debtAmount > 0 &&
+          transaction.studentName != null &&
+          transaction.studentName!.isNotEmpty) {
+        final ecQuery = await _firestore
+            .collection(AppConstants.externalDebtorsCollection)
+            .where('name', isEqualTo: transaction.studentName!.trim())
+            .limit(1)
+            .get();
+        if (ecQuery.docs.isNotEmpty) {
+          externalDebtorRef = ecQuery.docs.first.reference;
+          externalDebtorDoc = await tx.get(externalDebtorRef);
+        }
+      }
+
       final productRefs = <CartItem, DocumentReference>{};
       final productDocs = <CartItem, DocumentSnapshot>{};
       
@@ -47,7 +65,7 @@ class VoidRepository {
         'void_reason': reason,
       });
 
-      // 3. REVERSE WALLET AND DEBT
+      // 3. REVERSE WALLET AND DEBT (Student)
       double walletDeducted = transaction.walletAmount;
       if (studentDoc != null && studentDoc.exists && studentRef != null) {
         if (walletDeducted > 0 || transaction.debtAmount > 0) {
@@ -65,6 +83,18 @@ class VoidRepository {
              'updated_at': FieldValue.serverTimestamp(),
            });
         }
+      }
+
+      // 3b. REVERSE EXTERNAL DEBTOR DEBT
+      if (externalDebtorDoc != null && externalDebtorDoc.exists && externalDebtorRef != null) {
+        final ecData = externalDebtorDoc.data() as Map<String, dynamic>;
+        final currentEcDebt = (ecData['debt'] ?? 0).toDouble();
+        double newEcDebt = currentEcDebt - transaction.debtAmount;
+        if (newEcDebt < 0) newEcDebt = 0;
+        tx.update(externalDebtorRef, {
+          'debt': newEcDebt,
+          'updated_at': FieldValue.serverTimestamp(),
+        });
       }
 
       // 4. REVERSE STOCK CHANGES

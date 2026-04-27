@@ -1,14 +1,22 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/repositories/expense_repository.dart';
 import '../data/models/expense_model.dart';
+import '../core/constants/store_section.dart';
 import 'analytics_providers.dart';
+import 'store_section_provider.dart';
 
 // ─── Filtered Analytics Expenses ───
 final filteredExpensesProvider = StreamProvider<List<Expense>>((ref) {
   final repo = ref.watch(expenseRepositoryProvider);
   final dateRange = ref.watch(analyticsResolvedDateRangeProvider);
-  if (dateRange == null) return repo.getExpenses();
-  return repo.getExpensesByDateRange(dateRange.start, dateRange.end);
+  final section = ref.watch(storeSectionProvider);
+  
+  final stream = dateRange == null
+      ? repo.getExpenses()
+      : repo.getExpensesByDateRange(dateRange.start, dateRange.end);
+  
+  if (section == StoreSection.all) return stream;
+  return stream.map((list) => list.where((e) => e.section == section.firestoreValue).toList());
 });
 
 // ─── Repository Provider ───
@@ -19,7 +27,10 @@ final expenseRepositoryProvider = Provider<ExpenseRepository>((ref) {
 // ─── All Expenses Stream ───
 final expensesStreamProvider = StreamProvider<List<Expense>>((ref) {
   final repo = ref.watch(expenseRepositoryProvider);
-  return repo.getExpenses();
+  final section = ref.watch(storeSectionProvider);
+  final stream = repo.getExpenses();
+  if (section == StoreSection.all) return stream;
+  return stream.map((list) => list.where((e) => e.section == section.firestoreValue).toList());
 });
 
 // ─── Filtered Total Expenses ───

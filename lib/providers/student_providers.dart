@@ -129,33 +129,37 @@ final studentStatsProvider = FutureProvider<StudentStats>((ref) async {
 
 /// Provider for search results (Student objects with balance/debt).
 ///
-/// Strategy (optimised for speed):
-///   1. Try local index first → zero Firestore reads (instant, offline-capable).
-///   2. If local index is empty (fresh device, never synced) OR has no matches,
+/// Strategy (optimised for speed & minimal Firestore reads):
+///   1. Try local index first → zero Firestore reads for the search itself.
+///      If index is populated, trust it: no match = genuinely no match.
+///      Only fetches full Student docs by ID for the matched entries.
+///   2. If local index is empty (fresh device, never synced),
 ///      fall back to **server-side** Firestore queries:
-///      a) Prefix query on `name` field (uses Firestore inequality range scan).
-///      b) Exact document-ID lookup (for admission number search).
-///      c) Substring search on `name_lower` if set, else case-insensitive fallback.
-///   This makes search work immediately on a fresh install — no sync required.
+///      a) array-contains on search_terms (word-prefix match).
+///      b) Name prefix query (legacy fallback).
+///      c) Exact document-ID lookup (admission number search).
+///      This makes search work immediately on a fresh install — no sync required.
 final studentSearchResultsProvider = FutureProvider<List<Student>>((ref) async {
   final query = ref.watch(studentSearchQueryProvider);
   if (query.trim().isEmpty) return [];
 
   final trimmed = query.trim();
   final index = ref.read(studentSearchIndexProvider);
-  await index.load();
 
-  // ── 1. Try local index first (zero Firestore reads, instant) ──
+  // Only await load if the index hasn't been loaded yet (avoids an async
+  // frame on every keystroke when the index is already in memory).
+  if (!index.isLoaded) await index.load();
+
+  // ── 1. Local index is populated → use it exclusively (zero search reads) ──
   if (index.length > 0) {
     final matches = index.search(trimmed, limit: 12);
-    if (matches.isNotEmpty) {
-      final ids = matches.map((m) => m.studentId).toList();
-      final repo = ref.read(studentRepositoryProvider);
-      return repo.getStudentsByIds(ids);
-    }
+    if (matches.isEmpty) return []; // Trust the index — no match means no match
+    final ids = matches.map((m) => m.studentId).toList();
+    final repo = ref.read(studentRepositoryProvider);
+    return repo.getStudentsByIds(ids);
   }
 
-  // ── 2. Fallback: search Firestore directly ──
+  // ── 2. Index empty (fresh install) → fall back to Firestore search ──
   final repo = ref.read(studentRepositoryProvider);
   return repo.searchStudents(trimmed, limit: 12);
 });
@@ -164,6 +168,11 @@ final studentSearchResultsProvider = FutureProvider<List<Student>>((ref) async {
 //  BACKWARD COMPAT — keep old providers as aliases
 //  (used by Analytics CSV export)
 // ═══════════════════════════════════════════════════════════════
+
+final studentsStreamProvider = StreamProvider<List<Student>>((ref) {
+  final repo = ref.watch(studentRepositoryProvider);
+  return repo.getStudents();
+});
 
 final totalWalletBalanceProvider = Provider<double>((ref) {
   final statsAsync = ref.watch(studentStatsProvider);

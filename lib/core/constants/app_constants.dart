@@ -12,10 +12,13 @@ class AppConstants {
   static const String transactionsCollection = 'transactions';
   static const String expensesCollection = 'expenses';
   static const String auditLogsCollection = 'audit_logs';
+  static const String externalDebtorsCollection = 'external_debtors';
 
   // ─── Payment Modes ───
   static const String paymentCash = 'cash';
   static const String paymentWallet = 'wallet';
+  static const String paymentUpi = 'upi';
+  static const String paymentDebt = 'debt';
   static const String paymentMixed = 'mixed';
 
   // ─── External API ───

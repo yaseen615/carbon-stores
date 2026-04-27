@@ -116,10 +116,12 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
           action: AppConstants.auditSync,
           description:
               'Synced students from API: ${result.newlyAdded} added, '
-              '${result.alreadyExisted} already existed',
+              '${result.updated} updated, '
+              '${result.alreadyExisted} unchanged',
           metadata: {
             'total_fetched': result.totalFetched,
             'newly_added': result.newlyAdded,
+            'updated': result.updated,
             'already_existed': result.alreadyExisted,
           },
         );
@@ -127,8 +129,8 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
         // Rebuild search index after every successful sync
         await _rebuildSearchIndexFromFirestore();
 
-        // Only refresh paginated UI if new students were actually added
-        if (result.newlyAdded > 0) {
+        // Only refresh paginated UI if new students were actually added or updated
+        if (result.newlyAdded > 0 || result.updated > 0) {
           ref.read(paginatedStudentsProvider.notifier).refresh();
           ref.invalidate(studentStatsProvider);
         }
@@ -136,11 +138,11 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
         if (!mounted) return;
         _showSyncSnackBar(
           icon: Icons.check_circle_outline_rounded,
-          message: result.newlyAdded > 0
-              ? 'Students synced successfully! '
-                    '${result.newlyAdded} new, ${result.alreadyExisted} existing'
+          message: (result.newlyAdded > 0 || result.updated > 0)
+              ? 'Students synced! '
+                    '${result.newlyAdded} new, ${result.updated} updated, ${result.alreadyExisted} unchanged'
               : 'All students are already up to date '
-                    '(${result.alreadyExisted} found)',
+                    '(${result.alreadyExisted} unchanged)',
           isError: false,
         );
       }
@@ -200,8 +202,8 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'This will fetch students from the server and add any new students to the system. '
-                  'Existing students and their balances will not be affected.',
+                  'This will add new students and update the names of existing students. '
+                  'Balances and existing debts will never be affected.',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.inter(
                     fontSize: 13,
@@ -577,10 +579,12 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
     final balanceController = TextEditingController(text: '0');
     final pos = context.pos;
     final cs = Theme.of(context).colorScheme;
+    bool isSaving = false;
 
     showDialog(
       context: context,
-      builder: (ctx) => Dialog(
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         elevation: 0,
         backgroundColor: Theme.of(ctx).colorScheme.surface,
@@ -646,11 +650,12 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: () async {
+                    onPressed: isSaving ? null : () async {
                       if (idController.text.isEmpty ||
                           nameController.text.isEmpty) {
                         return;
                       }
+                      setState(() => isSaving = true);
                       final student = Student(
                         id: idController.text.trim(),
                         name: nameController.text.trim(),
@@ -678,6 +683,7 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
                         ref.invalidate(studentStatsProvider);
                         if (ctx.mounted) Navigator.pop(ctx);
                       } catch (e) {
+                        setState(() => isSaving = false);
                         if (ctx.mounted) {
                           ScaffoldMessenger.of(ctx).showSnackBar(
                             SnackBar(
@@ -695,19 +701,29 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    child: Text(
-                      'Add Student',
-                      style: GoogleFonts.inter(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    child: isSaving
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            'Add Student',
+                            style: GoogleFonts.inter(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                   ),
                 ),
               ],
             ),
           ),
         ),
+      ),
       ),
     );
   }
@@ -1093,12 +1109,16 @@ class _StudentCardState extends State<_StudentCard>
     final cs = Theme.of(context).colorScheme;
     final pos = context.pos;
 
+    bool isSaving = false;
+
     showDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        elevation: 0,
-        backgroundColor: Theme.of(ctx).colorScheme.surface,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => Dialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          elevation: 0,
+          backgroundColor: Theme.of(ctx).colorScheme.surface,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 380),
           child: Padding(
@@ -1207,43 +1227,73 @@ class _StudentCardState extends State<_StudentCard>
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: () async {
-                      final amount = double.tryParse(amountController.text);
-                      if (amount == null || amount <= 0) return;
+                    onPressed: isSaving
+                        ? null
+                        : () async {
+                            final amount =
+                                double.tryParse(amountController.text);
+                            if (amount == null || amount <= 0) return;
 
-                      await StudentRepository().rechargeWallet(
-                        student.id,
-                        amount,
-                      );
-                      await AuditRepository().log(
-                        action: AppConstants.auditRecharge,
-                        description:
-                            'Recharged ${student.name}: ${CurrencyFormatter.format(amount)}',
-                        metadata: {'student_id': student.id, 'amount': amount},
-                      );
-                      if (ctx.mounted) Navigator.pop(ctx);
-                      widget.onRechargeSuccess();
-                    },
+                            setState(() => isSaving = true);
+                            try {
+                              await StudentRepository().rechargeWallet(
+                                student.id,
+                                amount,
+                              );
+                              await AuditRepository().log(
+                                action: AppConstants.auditRecharge,
+                                description:
+                                    'Recharged ${student.name}: ${CurrencyFormatter.format(amount)}',
+                                metadata: {
+                                  'student_id': student.id,
+                                  'amount': amount
+                                },
+                              );
+                              if (ctx.mounted) Navigator.pop(ctx);
+                              widget.onRechargeSuccess();
+                            } catch (e) {
+                              if (ctx.mounted) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Error: $e'),
+                                    backgroundColor: pos.error,
+                                  ),
+                                );
+                              }
+                              setState(() => isSaving = false);
+                            }
+                          },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: pos.info,
                       foregroundColor: Colors.white,
+                      disabledBackgroundColor: pos.info.withValues(alpha: 0.5),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    child: Text(
-                      'Recharge',
-                      style: GoogleFonts.inter(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    child: isSaving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            'Recharge',
+                            style: GoogleFonts.inter(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                   ),
                 ),
               ],
             ),
           ),
         ),
+      ),
       ),
     );
   }

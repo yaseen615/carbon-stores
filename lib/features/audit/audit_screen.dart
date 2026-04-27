@@ -1,20 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../core/utils/responsive_helper.dart';
 import '../../core/theme/pos_colors.dart';
 import '../../data/models/audit_log_model.dart';
-import '../../data/repositories/audit_repository.dart';
+import '../../providers/audit_pagination_provider.dart';
 
-class AuditScreen extends StatefulWidget {
+class AuditScreen extends ConsumerStatefulWidget {
   const AuditScreen({super.key});
 
   @override
-  State<AuditScreen> createState() => _AuditScreenState();
+  ConsumerState<AuditScreen> createState() => _AuditScreenState();
 }
 
-class _AuditScreenState extends State<AuditScreen> {
-  final AuditRepository _repo = AuditRepository();
+class _AuditScreenState extends ConsumerState<AuditScreen> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      ref.read(paginatedAuditProvider.notifier).loadMore();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -65,21 +84,9 @@ class _AuditScreenState extends State<AuditScreen> {
 
           // ─── Logs Stream ───
           Expanded(
-            child: StreamBuilder<List<AuditLog>>(
-              stream: _repo.getRecentLogs(limit: 100),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(
-                      child: Text('Error: ${snapshot.error}',
-                          style: TextStyle(color: pos.error)));
-                }
-                if (!snapshot.hasData) {
-                  return Center(
-                      child: CircularProgressIndicator(
-                          color: cs.primary, strokeWidth: 2.5));
-                }
-
-                final logs = snapshot.data!;
+            child: ref.watch(paginatedAuditProvider).when(
+              data: (paginatedState) {
+                final logs = paginatedState.logs;
                 if (logs.isEmpty) {
                   return Center(
                     child: Column(
@@ -98,15 +105,29 @@ class _AuditScreenState extends State<AuditScreen> {
                 }
 
                 return ListView.separated(
+                  controller: _scrollController,
                   padding: const EdgeInsets.only(bottom: 24),
-                  itemCount: logs.length,
+                  itemCount: logs.length + (paginatedState.isLoadingMore ? 1 : 0),
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (context, index) {
-                    return _AuditLogTile(
-                        log: logs[index], isDark: isDark);
+                    if (index == logs.length) {
+                      return Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Center(
+                            child: CircularProgressIndicator(
+                                color: cs.primary, strokeWidth: 2.5)),
+                      );
+                    }
+                    return _AuditLogTile(log: logs[index], isDark: isDark);
                   },
                 );
               },
+              loading: () => Center(
+                  child: CircularProgressIndicator(
+                      color: cs.primary, strokeWidth: 2.5)),
+              error: (err, _) => Center(
+                  child: Text('Error: $err',
+                      style: TextStyle(color: pos.error))),
             ),
           ),
         ],
@@ -115,13 +136,89 @@ class _AuditScreenState extends State<AuditScreen> {
   }
 
   Widget _buildFilterButton() {
-    return OutlinedButton.icon(
-      onPressed: () {},
-      icon: const Icon(Icons.filter_list_rounded, size: 18),
-      label: const Text('Filter'),
-      style: OutlinedButton.styleFrom(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12)),
+    final filter = ref.watch(auditFilterProvider);
+    final hasFilter = filter.startDate != null || filter.endDate != null;
+
+    return InkWell(
+      onTap: () async {
+        final DateTimeRange? picked = await showDateRangePicker(
+          context: context,
+          firstDate: DateTime(2023),
+          lastDate: DateTime.now().add(const Duration(days: 1)),
+          initialDateRange: filter.startDate != null && filter.endDate != null
+              ? DateTimeRange(start: filter.startDate!, end: filter.endDate!)
+              : null,
+          builder: (context, child) {
+            return Theme(
+              data: Theme.of(context).copyWith(
+                colorScheme: Theme.of(context).colorScheme.copyWith(
+                  primary: Theme.of(context).colorScheme.primary,
+                  onPrimary: Theme.of(context).colorScheme.onPrimary,
+                  surface: Theme.of(context).colorScheme.surface,
+                  onSurface: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+              child: child!,
+            );
+          },
+        );
+
+        if (picked != null) {
+          ref.read(auditFilterProvider.notifier).state = AuditFilter(
+            startDate: picked.start,
+            endDate: picked.end.add(const Duration(days: 1)), // Include the full end day
+          );
+        } else if (hasFilter) {
+          // Clear filter if they cancel and we had one?
+          // Actually usually cancel should keep current.
+          // Let's add a long press or a "Clear" option if needed, 
+          // but for now let's just allow picking or resetting by picking a wide range.
+          // Alternatively, we can use a custom dialog if more control is needed.
+        }
+      },
+      onLongPress: hasFilter ? () {
+        ref.read(auditFilterProvider.notifier).state = AuditFilter();
+      } : null,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: hasFilter 
+              ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.5)
+              : Theme.of(context).colorScheme.outline.withValues(alpha: 0.3)
+          ),
+          borderRadius: BorderRadius.circular(12),
+          color: hasFilter ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.05) : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              hasFilter ? Icons.date_range_rounded : Icons.filter_list_rounded, 
+              size: 18,
+              color: hasFilter ? Theme.of(context).colorScheme.primary : null,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              hasFilter 
+                  ? "${DateFormatter.formatDate(filter.startDate!)} - ${DateFormatter.formatDate(filter.endDate!.subtract(const Duration(days: 1)))}"
+                  : 'Filter By Date', 
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: hasFilter ? Theme.of(context).colorScheme.primary : null,
+                fontWeight: hasFilter ? FontWeight.w600 : null,
+              )
+            ),
+            if (hasFilter) ...[
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => ref.read(auditFilterProvider.notifier).state = AuditFilter(),
+                child: Icon(Icons.close_rounded, size: 16, color: Theme.of(context).colorScheme.primary),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

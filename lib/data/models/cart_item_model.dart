@@ -4,6 +4,7 @@ class CartItem {
   final double price;
   final int quantity;
   final String? imageId;
+  final String section; // 'cafe' or 'store' — carried from Product
 
   const CartItem({
     required this.productId,
@@ -11,6 +12,7 @@ class CartItem {
     required this.price,
     required this.quantity,
     this.imageId,
+    this.section = 'store',
   });
 
   double get total => price * quantity;
@@ -21,6 +23,7 @@ class CartItem {
     double? price,
     int? quantity,
     String? imageId,
+    String? section,
   }) {
     return CartItem(
       productId: productId ?? this.productId,
@@ -28,6 +31,7 @@ class CartItem {
       price: price ?? this.price,
       quantity: quantity ?? this.quantity,
       imageId: imageId ?? this.imageId,
+      section: section ?? this.section,
     );
   }
 
@@ -38,6 +42,7 @@ class CartItem {
       'price': price,
       'qty': quantity,
       'imageId': imageId,
+      'section': section,
     };
   }
 
@@ -48,6 +53,7 @@ class CartItem {
       price: (map['price'] ?? 0).toDouble(),
       quantity: (map['qty'] ?? 0).toInt(),
       imageId: map['imageId'] as String?,
+      section: map['section'] ?? 'store',
     );
   }
 

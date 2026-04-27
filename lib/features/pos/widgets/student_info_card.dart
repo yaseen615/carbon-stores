@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/pos_colors.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../providers/student_providers.dart';
+import '../../../providers/multi_cart_provider.dart';
 import '../../../data/models/student_model.dart';
 
 class StudentInfoCard extends ConsumerStatefulWidget {
@@ -25,13 +27,13 @@ class _StudentInfoCardState extends ConsumerState<StudentInfoCard> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedStudent = ref.watch(selectedStudentProvider);
+    final selectedStudent = ref.watch(multiCartProvider).activeStudent;
 
     if (selectedStudent != null && !_isSearching) {
       return _SelectedStudentView(
         student: selectedStudent,
         onClear: () {
-          ref.read(selectedStudentProvider.notifier).state = null;
+          ref.read(multiCartProvider.notifier).clearStudent();
           ref.read(studentSearchQueryProvider.notifier).state = '';
         },
       );
@@ -40,7 +42,7 @@ class _StudentInfoCardState extends ConsumerState<StudentInfoCard> {
     return _StudentSearch(
       controller: _searchController,
       onStudentSelected: (student) {
-        ref.read(selectedStudentProvider.notifier).state = student;
+        ref.read(multiCartProvider.notifier).setStudent(student);
         _searchController.clear();
         ref.read(studentSearchQueryProvider.notifier).state = '';
         setState(() => _isSearching = false);
@@ -174,7 +176,7 @@ class _SelectedStudentView extends StatelessWidget {
   }
 }
 
-class _StudentSearch extends ConsumerWidget {
+class _StudentSearch extends ConsumerStatefulWidget {
   final TextEditingController controller;
   final ValueChanged<Student> onStudentSelected;
   final ValueChanged<bool> onSearchToggle;
@@ -188,13 +190,41 @@ class _StudentSearch extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_StudentSearch> createState() => _StudentSearchState();
+}
+
+class _StudentSearchState extends ConsumerState<_StudentSearch> {
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-warm the search index so it's in memory before the user types
+    final index = ref.read(studentSearchIndexProvider);
+    if (!index.isLoaded) index.load();
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  void _onQueryChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 280), () {
+      ref.read(studentSearchQueryProvider.notifier).state = value;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final pos = context.pos;
 
-    if (!isSearching) {
+    if (!widget.isSearching) {
       return InkWell(
-        onTap: () => onSearchToggle(true),
+        onTap: () => widget.onSearchToggle(true),
         borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -234,7 +264,7 @@ class _StudentSearch extends ConsumerWidget {
             children: [
               Expanded(
                 child: TextField(
-                  controller: controller,
+                  controller: widget.controller,
                   autofocus: true,
                   style: GoogleFonts.inter(fontSize: 13, color: cs.onSurface),
                   decoration: InputDecoration(
@@ -247,17 +277,16 @@ class _StudentSearch extends ConsumerWidget {
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     isDense: true,
                   ),
-                  onChanged: (value) {
-                    ref.read(studentSearchQueryProvider.notifier).state = value;
-                  },
+                  onChanged: _onQueryChanged, // debounced — 280ms
                 ),
               ),
               const SizedBox(width: 4),
               GestureDetector(
                 onTap: () {
-                  controller.clear();
+                  _debounce?.cancel();
+                  widget.controller.clear();
                   ref.read(studentSearchQueryProvider.notifier).state = '';
-                  onSearchToggle(false);
+                  widget.onSearchToggle(false);
                 },
                 child: Container(
                   width: 32,
@@ -317,7 +346,7 @@ class _StudentSearch extends ConsumerWidget {
                     itemBuilder: (context, index) {
                       final student = filtered[index];
                       return InkWell(
-                        onTap: () => onStudentSelected(student),
+                        onTap: () => widget.onStudentSelected(student),
                         borderRadius: BorderRadius.circular(8),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(

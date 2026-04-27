@@ -7,6 +7,7 @@ class AuditLog {
   final String? userId;
   final Map<String, dynamic>? metadata;
   final DateTime timestamp;
+  final DocumentSnapshot? snapshot;
 
   const AuditLog({
     required this.id,
@@ -15,6 +16,7 @@ class AuditLog {
     this.userId,
     this.metadata,
     required this.timestamp,
+    this.snapshot,
   });
 
   factory AuditLog.fromFirestore(DocumentSnapshot doc) {
@@ -26,6 +28,7 @@ class AuditLog {
       userId: data['user'],
       metadata: data['metadata'] as Map<String, dynamic>?,
       timestamp: (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      snapshot: doc,
     );
   }
 

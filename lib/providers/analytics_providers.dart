@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'student_providers.dart';
+import 'external_debtor_providers.dart';
 
 enum AnalyticsDateFilter {
   today,
@@ -40,4 +42,26 @@ final analyticsResolvedDateRangeProvider = Provider<DateTimeRange?>((ref) {
     case AnalyticsDateFilter.allTime:
       return null;
   }
+});
+
+// ─── Total Outstanding Debt Helper ───
+final totalOverallDebtProvider = Provider<double>((ref) {
+  final studentsAsync = ref.watch(studentsStreamProvider);
+  final externalsAsync = ref.watch(externalDebtorsStreamProvider);
+  
+  double total = 0;
+  
+  studentsAsync.whenData((students) {
+    for (final s in students) {
+      total += s.debt;
+    }
+  });
+
+  externalsAsync.whenData((externals) {
+    for (final e in externals) {
+      total += e.debt;
+    }
+  });
+  
+  return total;
 });

@@ -7,11 +7,14 @@ import '../../core/theme/pos_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/responsive_helper.dart';
 import '../../core/utils/csv_exporter.dart';
+import '../../core/utils/date_formatter.dart';
+import '../../core/constants/store_section.dart';
 import '../../providers/transaction_providers.dart';
 import '../../providers/expense_providers.dart';
 import '../../providers/student_providers.dart';
 import '../../providers/product_providers.dart';
 import '../../providers/analytics_providers.dart';
+import '../../providers/store_section_provider.dart';
 
 import '../../data/models/product_model.dart';
 import '../../data/models/transaction_model.dart';
@@ -25,7 +28,7 @@ class AnalyticsScreen extends ConsumerWidget {
     final transactionsAsync = ref.watch(filteredTransactionsProvider);
     final totalExpenses = ref.watch(totalFilteredExpensesProvider);
     final totalWallet = ref.watch(totalWalletBalanceProvider);
-    final totalDebt = ref.watch(totalDebtProvider);
+    final totalDebt = ref.watch(totalOverallDebtProvider);
     final currentFilter = ref.watch(analyticsDateFilterProvider);
     final cs = Theme.of(context).colorScheme;
     final pos = context.pos;
@@ -66,7 +69,69 @@ class AnalyticsScreen extends ConsumerWidget {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
+
+          // ─── Section Filter (Cafe / Store / All) ───
+          Consumer(
+            builder: (context, ref, _) {
+              final current = ref.watch(storeSectionProvider);
+              const options = [StoreSection.all, StoreSection.cafe, StoreSection.store];
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: Row(
+                  children: options.map((section) {
+                    final isSelected = section == current;
+                    final Color activeColor;
+                    switch (section) {
+                      case StoreSection.cafe:
+                        activeColor = const Color(0xFF0090D9); // blue
+                        break;
+                      case StoreSection.store:
+                        activeColor = const Color(0xFF34C759); // green
+                        break;
+                      default:
+                        activeColor = cs.primary;
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: GestureDetector(
+                        onTap: () => ref.read(storeSectionProvider.notifier).state = section,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+                          decoration: BoxDecoration(
+                            color: isSelected ? activeColor : activeColor.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: isSelected ? activeColor : activeColor.withValues(alpha: 0.3),
+                              width: 1.5,
+                            ),
+                            boxShadow: isSelected ? [
+                              BoxShadow(
+                                color: activeColor.withValues(alpha: 0.35),
+                                blurRadius: 10,
+                                offset: const Offset(0, 3),
+                              )
+                            ] : [],
+                          ),
+                          child: Text(
+                            '${section.emoji} ${section.label}',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: isSelected ? Colors.white : activeColor,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 16),
 
           // ─── Filter Row (Apple Style Pills) ───
           SingleChildScrollView(
@@ -283,13 +348,17 @@ class AnalyticsScreen extends ConsumerWidget {
 
   void _exportReports(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
+    bool isExporting = false;
+    String? exportingLabel;
 
     showDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        elevation: 0,
-        backgroundColor: Theme.of(ctx).colorScheme.surface,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => Dialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          elevation: 0,
+          backgroundColor: Theme.of(ctx).colorScheme.surface,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 380),
           child: Padding(
@@ -325,68 +394,103 @@ class AnalyticsScreen extends ConsumerWidget {
                 _ExportOption(
                   icon: Icons.shopping_cart_rounded,
                   label: 'Sales Report',
-                  onTap: () async {
-                    final transactionsAsync =
-                        ref.read(filteredTransactionsProvider);
-                    final transactions = transactionsAsync.maybeWhen(
-                        data: (d) => d,
-                        orElse: () => <StoreTransaction>[]);
-                    await CsvExporter.exportSalesReport(transactions);
-                    if (ctx.mounted) {
-                      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
-                          content: Text('Sales report exported!')));
-                      Navigator.pop(ctx);
-                    }
-                  },
+                  isExporting: isExporting && exportingLabel == 'Sales Report',
+                  onTap: isExporting
+                      ? null
+                      : () async {
+                          setState(() {
+                            isExporting = true;
+                            exportingLabel = 'Sales Report';
+                          });
+                          final transactionsAsync =
+                              ref.read(filteredTransactionsProvider);
+                          final transactions = transactionsAsync.maybeWhen(
+                              data: (d) => d,
+                              orElse: () => <StoreTransaction>[]);
+                          final section = ref.read(storeSectionProvider).label;
+                          await CsvExporter.exportSalesReport(transactions,
+                              sectionPrefix: section);
+                          if (ctx.mounted) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                                content: Text('Sales report exported!')));
+                            Navigator.pop(ctx);
+                          }
+                        },
                 ),
                 _ExportOption(
                   icon: Icons.inventory_2_rounded,
                   label: 'Inventory Report',
-                  onTap: () async {
-                    final productsAsync = ref.read(productsStreamProvider);
-                    final products = productsAsync.maybeWhen(
-                        data: (d) => d, orElse: () => <Product>[]);
-                    await CsvExporter.exportInventoryReport(products);
-                    if (ctx.mounted) {
-                      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
-                          content: Text('Inventory report exported!')));
-                      Navigator.pop(ctx);
-                    }
-                  },
+                  isExporting:
+                      isExporting && exportingLabel == 'Inventory Report',
+                  onTap: isExporting
+                      ? null
+                      : () async {
+                          setState(() {
+                            isExporting = true;
+                            exportingLabel = 'Inventory Report';
+                          });
+                          final productsAsync = ref.read(productsStreamProvider);
+                          final products = productsAsync.maybeWhen(
+                              data: (d) => d, orElse: () => <Product>[]);
+                          final section = ref.read(storeSectionProvider).label;
+                          await CsvExporter.exportInventoryReport(products,
+                              sectionPrefix: section);
+                          if (ctx.mounted) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                                content: Text('Inventory report exported!')));
+                            Navigator.pop(ctx);
+                          }
+                        },
                 ),
                 _ExportOption(
                   icon: Icons.school_rounded,
                   label: 'Student Report',
-                  onTap: () async {
-                    // Show a quick snackbar so they know it's loading
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                        content: Text('Generating Student Report...')));
+                  isExporting: isExporting && exportingLabel == 'Student Report',
+                  onTap: isExporting
+                      ? null
+                      : () async {
+                          setState(() {
+                            isExporting = true;
+                            exportingLabel = 'Student Report';
+                          });
+                          // Show a quick snackbar so they know it's loading
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                              content: Text('Generating Student Report...')));
 
-                    final repo = ref.read(studentRepositoryProvider);
-                    final students = await repo.getAllStudentsForExport();
+                          final repo = ref.read(studentRepositoryProvider);
+                          final students = await repo.getAllStudentsForExport();
 
-                    await CsvExporter.exportStudentReport(students);
-                    if (ctx.mounted) {
-                      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
-                          content: Text('Student report exported!')));
-                      Navigator.pop(ctx);
-                    }
-                  },
+                          await CsvExporter.exportStudentReport(students);
+                          if (ctx.mounted) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                                content: Text('Student report exported!')));
+                            Navigator.pop(ctx);
+                          }
+                        },
                 ),
                 _ExportOption(
                   icon: Icons.trending_down_rounded,
                   label: 'Expense Report',
-                  onTap: () async {
-                    final expensesAsync = ref.read(filteredExpensesProvider);
-                    final expenses = expensesAsync.maybeWhen(
-                        data: (d) => d, orElse: () => <Expense>[]);
-                    await CsvExporter.exportExpenseReport(expenses);
-                    if (ctx.mounted) {
-                      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
-                          content: Text('Expense report exported!')));
-                      Navigator.pop(ctx);
-                    }
-                  },
+                  isExporting: isExporting && exportingLabel == 'Expense Report',
+                  onTap: isExporting
+                      ? null
+                      : () async {
+                          setState(() {
+                            isExporting = true;
+                            exportingLabel = 'Expense Report';
+                          });
+                          final expensesAsync = ref.read(filteredExpensesProvider);
+                          final expenses = expensesAsync.maybeWhen(
+                              data: (d) => d, orElse: () => <Expense>[]);
+                          final section = ref.read(storeSectionProvider).label;
+                          await CsvExporter.exportExpenseReport(expenses,
+                              sectionPrefix: section);
+                          if (ctx.mounted) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                                content: Text('Expense report exported!')));
+                            Navigator.pop(ctx);
+                          }
+                        },
                 ),
                 _ExportOption(
                   icon: Icons.analytics_rounded,
@@ -400,9 +504,10 @@ class AnalyticsScreen extends ConsumerWidget {
                     final expensesAsync = ref.read(filteredExpensesProvider);
                     final expenses = expensesAsync.maybeWhen(
                         data: (d) => d, orElse: () => <Expense>[]);
+                    final section = ref.read(storeSectionProvider).label;
 
                     await CsvExporter.exportPandLReport(
-                        transactions, expenses);
+                        transactions, expenses, sectionPrefix: section);
                     if (ctx.mounted) {
                       ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
                           content: Text('P&L report exported!')));
@@ -413,6 +518,7 @@ class AnalyticsScreen extends ConsumerWidget {
               ],
             ),
           ),
+        ),
         ),
       ),
     );
@@ -583,7 +689,9 @@ class _FilterChip extends StatelessWidget {
                   : [],
             ),
             child: Text(
-              label,
+              filter == AnalyticsDateFilter.custom && ref.watch(analyticsCustomDateRangeProvider) != null
+                  ? 'Custom: ${DateFormatter.formatDate(ref.read(analyticsCustomDateRangeProvider)!.start)} - ${DateFormatter.formatDate(ref.read(analyticsCustomDateRangeProvider)!.end)}'
+                  : label,
               style: GoogleFonts.inter(
                 fontSize: 13,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
@@ -993,12 +1101,14 @@ class _RecentTransactionsCard extends StatelessWidget {
 class _ExportOption extends StatefulWidget {
   final IconData icon;
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final bool isExporting;
 
   const _ExportOption({
     required this.icon,
     required this.label,
     required this.onTap,
+    this.isExporting = false,
   });
 
   @override
@@ -1034,8 +1144,18 @@ class _ExportOptionState extends State<_ExportOption> {
                   style: GoogleFonts.inter(
                       fontSize: 14, color: cs.onSurface)),
               const Spacer(),
-              Icon(Icons.chevron_right_rounded,
-                  size: 18, color: cs.onSurfaceVariant),
+              if (widget.isExporting)
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.blue,
+                  ),
+                )
+              else
+                Icon(Icons.chevron_right_rounded,
+                    size: 18, color: cs.onSurfaceVariant),
             ],
           ),
         ),

@@ -15,10 +15,15 @@ void main() async {
   );
 
   // Enable Firestore offline persistence
-  FirebaseFirestore.instance.settings = const Settings(
-    persistenceEnabled: true,
-    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-  );
+  try {
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    );
+  } catch (e) {
+    // Already initialized (common on hot restart in web)
+    debugPrint('Firestore settings already initialized: $e');
+  }
 
   // Allow all orientations instead of forcing landscape
   await SystemChrome.setPreferredOrientations([
@@ -27,6 +32,9 @@ void main() async {
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
   ]);
+
+  // Hide system UI (status bar and navigation bar) for full-screen mode
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
   runApp(
     const ProviderScope(

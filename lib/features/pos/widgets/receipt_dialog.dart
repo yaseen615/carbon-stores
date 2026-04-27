@@ -15,6 +15,7 @@ class ReceiptDialog extends StatelessWidget {
   final String paymentMode;
   final double walletDeducted;
   final double cashAmount;
+  final double upiAmount;
   final double debtAmount;
   final String? studentName;
   final StoreTransaction? transaction;
@@ -27,6 +28,7 @@ class ReceiptDialog extends StatelessWidget {
     required this.paymentMode,
     required this.walletDeducted,
     required this.cashAmount,
+    this.upiAmount = 0,
     required this.debtAmount,
     this.studentName,
     this.transaction,
@@ -151,6 +153,11 @@ class ReceiptDialog extends StatelessWidget {
                 _BreakdownRow(
                     label: 'Cash', amount: cashAmount, color: cs.onSurfaceVariant),
               ],
+              if (upiAmount > 0) ...[
+                const SizedBox(height: 4),
+                _BreakdownRow(
+                    label: 'UPI', amount: upiAmount, color: cs.primary),
+              ],
               if (debtAmount > 0) ...[
                 const SizedBox(height: 4),
                 _BreakdownRow(label: 'Debt', amount: debtAmount, color: pos.error),
@@ -239,10 +246,12 @@ class ReceiptDialog extends StatelessWidget {
     final reasonController = TextEditingController();
     final cs = Theme.of(context).colorScheme;
     final pos = context.pos;
+    bool isVoiding = false;
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('Cancel Purchase?',
             style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
@@ -266,42 +275,60 @@ class ReceiptDialog extends StatelessWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
+            onPressed: isVoiding ? null : () => Navigator.pop(ctx),
             child: const Text('Back'),
           ),
           ElevatedButton(
-            onPressed: () async {
-              final reason = reasonController.text.trim();
-              if (reason.isEmpty) return;
+            onPressed: isVoiding
+                ? null
+                : () async {
+                    final reason = reasonController.text.trim();
+                    if (reason.isEmpty) return;
 
-              Navigator.pop(ctx);
+                    setState(() => isVoiding = true);
 
-              try {
-                await VoidRepository().voidTransaction(transaction!, reason);
-                if (context.mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('Purchase cancelled successfully')),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to cancel: $e')),
-                  );
-                }
-              }
-            },
+                    try {
+                      await VoidRepository()
+                          .voidTransaction(transaction!, reason);
+                      if (context.mounted) {
+                        Navigator.pop(ctx);
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('Purchase cancelled successfully')),
+                        );
+                      }
+                    } catch (e) {
+                      if (ctx.mounted) {
+                        setState(() => isVoiding = false);
+                      }
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Failed to cancel: $e')),
+                        );
+                      }
+                    }
+                  },
             style: ElevatedButton.styleFrom(
               backgroundColor: pos.error,
               foregroundColor: Colors.white,
+              disabledBackgroundColor: pos.error.withValues(alpha: 0.5),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
             ),
-            child: const Text('Void Transaction'),
+            child: isVoiding
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Text('Void Transaction'),
           ),
         ],
+      ),
       ),
     );
   }

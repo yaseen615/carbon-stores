@@ -7,7 +7,7 @@ import '../../../core/utils/currency_formatter.dart';
 import '../../../core/services/local_storage_service.dart';
 import '../../../data/models/product_model.dart';
 import '../../../data/models/cart_item_model.dart';
-import '../../../providers/cart_providers.dart';
+import '../../../providers/multi_cart_provider.dart';
 
 /// Apple HIG-inspired product tile with:
 /// - 0.97 scale tap feedback
@@ -81,7 +81,7 @@ class _ProductTileState extends ConsumerState<ProductTile>
   void _onTap() {
     if (widget.product.isOutOfStock) return;
 
-    ref.read(cartProvider.notifier).addProduct(widget.product);
+    ref.read(multiCartProvider.notifier).addProduct(widget.product);
 
     // Trigger add-to-cart bounce
     _addToCartController.forward(from: 0);
@@ -93,7 +93,7 @@ class _ProductTileState extends ConsumerState<ProductTile>
     final pos = context.pos;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final cart = ref.watch(cartProvider);
+    final cart = ref.watch(multiCartProvider).activeItems;
     final cartItem = cart.cast<CartItem?>().firstWhere(
       (item) => item?.productId == widget.product.id,
       orElse: () => null,

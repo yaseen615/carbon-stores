@@ -18,6 +18,8 @@ import '../expenses/expenses_screen.dart';
 import '../analytics/analytics_screen.dart';
 import '../transactions/transactions_screen.dart';
 import '../audit/audit_screen.dart';
+import '../accounts/accounts_screen.dart';
+import '../debts/debts_screen.dart';
 import '../pos/widgets/pos_stats_bar.dart';
 import '../../core/utils/exporter/csv_exporter_stub.dart'
     if (dart.library.html) '../../core/utils/exporter/csv_exporter_web.dart'
@@ -128,6 +130,10 @@ class AppShell extends ConsumerWidget {
         return 'Transactions';
       case AppPage.auditLog:
         return 'Audit Log';
+      case AppPage.accounts:
+        return 'Accounts';
+      case AppPage.debts:
+        return 'Debts';
     }
   }
 
@@ -147,6 +153,10 @@ class AppShell extends ConsumerWidget {
         return const TransactionsScreen(key: ValueKey('transactions'));
       case AppPage.auditLog:
         return const AuditScreen(key: ValueKey('auditLog'));
+      case AppPage.accounts:
+        return const AccountsScreen(key: ValueKey('accounts'));
+      case AppPage.debts:
+        return const DebtsScreen(key: ValueKey('debts'));
     }
   }
 
@@ -187,6 +197,8 @@ class _PhoneShell extends StatelessWidget {
   /// Pages accessible under the "More" tab
   static const _morePages = [
     (page: AppPage.expenses, icon: Icons.receipt_long_outlined, label: 'Expenses'),
+    (page: AppPage.accounts, icon: Icons.account_balance_outlined, label: 'Accounts'),
+    (page: AppPage.debts, icon: Icons.money_off_csred_outlined, label: 'Debts'),
     (page: AppPage.transactions, icon: Icons.history_rounded, label: 'History'),
     (page: AppPage.auditLog, icon: Icons.fact_check_outlined, label: 'Audit Log'),
   ];
@@ -542,6 +554,18 @@ class _SideNav extends ConsumerWidget {
                   label: 'Analytics',
                   isSelected: currentPage == AppPage.analytics,
                   onTap: () => onPageSelected(AppPage.analytics),
+                ),
+                _NavItem(
+                  icon: Icons.account_balance_outlined,
+                  label: 'Accounts',
+                  isSelected: currentPage == AppPage.accounts,
+                  onTap: () => onPageSelected(AppPage.accounts),
+                ),
+                _NavItem(
+                  icon: Icons.money_off_csred_outlined,
+                  label: 'Debts',
+                  isSelected: currentPage == AppPage.debts,
+                  onTap: () => onPageSelected(AppPage.debts),
                 ),
                 _NavItem(
                   icon: Icons.history_rounded,

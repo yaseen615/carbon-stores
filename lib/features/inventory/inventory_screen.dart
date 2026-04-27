@@ -8,12 +8,19 @@ import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/responsive_helper.dart';
 import '../../core/widgets/search_field.dart';
 import '../../core/widgets/status_badge.dart';
+import '../../core/widgets/section_toggle.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/constants/store_section.dart';
 import '../../data/models/product_model.dart';
 import '../../data/repositories/product_repository.dart';
 import '../../data/repositories/audit_repository.dart';
+import '../../core/utils/date_formatter.dart';
+import '../../data/repositories/expense_repository.dart';
+import '../../data/models/expense_model.dart';
 import '../../providers/product_providers.dart';
+import '../../providers/store_section_provider.dart';
 import '../../core/services/local_storage_service.dart';
+import '../../core/utils/csv_exporter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
@@ -47,30 +54,36 @@ class InventoryScreen extends ConsumerWidget {
                         fontSize: 28,
                         fontWeight: FontWeight.w700,
                         letterSpacing: -0.4)),
+                const SizedBox(width: 16),
+                const SectionToggle(),
                 const Spacer(),
                 if (lowStockProducts.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: pos.warning.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.warning_rounded, size: 14, color: pos.warning),
-                        const SizedBox(width: 6),
-                        Text('${lowStockProducts.length} low stock',
-                            style: GoogleFonts.inter(
-                                color: pos.warning,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600)),
-                      ],
+                  InkWell(
+                    onTap: () => _showLowStockDetails(context, lowStockProducts),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: pos.warning.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.warning_rounded, size: 14, color: pos.warning),
+                          const SizedBox(width: 6),
+                          Text('${lowStockProducts.length} low stock',
+                              style: GoogleFonts.inter(
+                                  color: pos.warning,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600)),
+                        ],
+                      ),
                     ),
                   ),
                 const SizedBox(width: 12),
                 ElevatedButton.icon(
-                  onPressed: () => _showProductForm(context),
+                  onPressed: () => _showProductForm(context, ref),
                   icon: const Icon(Icons.add_rounded, size: 18),
                   label: const Text('Add Product'),
                   style: ElevatedButton.styleFrom(
@@ -93,29 +106,34 @@ class InventoryScreen extends ConsumerWidget {
                             fontWeight: FontWeight.w700,
                             letterSpacing: -0.4)),
                     const Spacer(),
+                    const SectionToggle(compact: true),
                     if (lowStockProducts.isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: pos.warning.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.warning_rounded, size: 12, color: pos.warning),
-                            const SizedBox(width: 4),
-                            Text('${lowStockProducts.length} low',
-                                style: GoogleFonts.inter(
-                                    color: pos.warning,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600)),
-                          ],
+                      InkWell(
+                        onTap: () => _showLowStockDetails(context, lowStockProducts),
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: pos.warning.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.warning_rounded, size: 12, color: pos.warning),
+                              const SizedBox(width: 4),
+                              Text('${lowStockProducts.length} low',
+                                  style: GoogleFonts.inter(
+                                      color: pos.warning,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600)),
+                            ],
+                          ),
                         ),
                       ),
                     const SizedBox(width: 8),
                     ElevatedButton.icon(
-                      onPressed: () => _showProductForm(context),
+                      onPressed: () => _showProductForm(context, ref),
                       icon: const Icon(Icons.add_rounded, size: 16),
                       label: const Text('Add'),
                       style: ElevatedButton.styleFrom(
@@ -216,7 +234,7 @@ class InventoryScreen extends ConsumerWidget {
                         product: product,
                         pos: pos,
                         isDark: isDark,
-                        onEdit: () => _showProductForm(context, product: product),
+                        onEdit: () => _showProductForm(context, ref, product: product),
                         onStockIn: () => _showStockInDialog(context, product),
                         onDelete: () => _confirmDelete(context, product),
                       );
@@ -274,7 +292,18 @@ class InventoryScreen extends ConsumerWidget {
                                       fontWeight: FontWeight.w600,
                                       fontSize: 12))),
                           DataColumn(
-                              label: Text('Price',
+                              label: Text('Supplier',
+                                  style: GoogleFonts.inter(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12))),
+                          DataColumn(
+                              label: Text('Retail ₹',
+                                  style: GoogleFonts.inter(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12)),
+                              numeric: true),
+                          DataColumn(
+                              label: Text('Wholesale ₹',
                                   style: GoogleFonts.inter(
                                       fontWeight: FontWeight.w600,
                                       fontSize: 12)),
@@ -313,9 +342,24 @@ class InventoryScreen extends ConsumerWidget {
                                   style: GoogleFonts.inter(
                                       color: cs.onSurfaceVariant))),
                               DataCell(Text(
+                                  product.supplier.isNotEmpty ? product.supplier : '—',
+                                  style: GoogleFonts.inter(
+                                      color: product.supplier.isNotEmpty
+                                          ? cs.onSurface
+                                          : cs.onSurfaceVariant.withValues(alpha: 0.3)))),
+                              DataCell(Text(
                                   CurrencyFormatter.format(product.price),
                                   style: GoogleFonts.inter(
                                       fontWeight: FontWeight.w600))),
+                              DataCell(Text(
+                                  product.wholesalePrice > 0
+                                      ? CurrencyFormatter.format(product.wholesalePrice)
+                                      : '—',
+                                  style: GoogleFonts.inter(
+                                      fontWeight: FontWeight.w500,
+                                      color: product.wholesalePrice > 0
+                                          ? cs.onSurfaceVariant
+                                          : cs.onSurfaceVariant.withValues(alpha: 0.3)))),
                               DataCell(Text('${product.stock}',
                                   style: GoogleFonts.inter(
                                     fontWeight: FontWeight.w700,
@@ -350,7 +394,7 @@ class InventoryScreen extends ConsumerWidget {
                                     icon: Icon(Icons.edit_rounded,
                                         size: 16, color: cs.primary),
                                     tooltip: 'Edit',
-                                    onPressed: () => _showProductForm(context,
+                                    onPressed: () => _showProductForm(context, ref,
                                         product: product),
                                   ),
                                   IconButton(
@@ -407,19 +451,30 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 
-  void _showProductForm(BuildContext context, {Product? product}) {
+  void _showProductForm(BuildContext context, WidgetRef ref, {Product? product}) {
     final isEdit = product != null;
     final nameController = TextEditingController(text: product?.name ?? '');
     final priceController =
         TextEditingController(text: product?.price.toString() ?? '');
+    final wholesalePriceController =
+        TextEditingController(text: product != null && product.wholesalePrice > 0 ? product.wholesalePrice.toString() : '');
     final stockController =
         TextEditingController(text: product?.stock.toString() ?? '0');
     final categoryController =
         TextEditingController(text: product?.category ?? '');
+    final supplierController =
+        TextEditingController(text: product?.supplier ?? '');
     final cs = Theme.of(context).colorScheme;
     final pos = context.pos;
     XFile? pickedImage;
     String? existingImageId = product?.imageId;
+    StoreSection selectedSection = product != null
+        ? StoreSection.fromString(product.section)
+        : (ref.read(storeSectionProvider) == StoreSection.all
+            ? StoreSection.store
+            : ref.read(storeSectionProvider));
+    bool isSaving = false;
+    DateTime selectedDate = DateTime.now();
 
     showDialog(
       context: context,
@@ -605,6 +660,13 @@ class InventoryScreen extends ConsumerWidget {
                         decoration:
                             const InputDecoration(labelText: 'Product Name')),
                     const SizedBox(height: 12),
+                    TextField(
+                        controller: supplierController,
+                        decoration: const InputDecoration(
+                          labelText: 'Supplier',
+                          hintText: 'e.g. ABC Distributors',
+                        )),
+                    const SizedBox(height: 12),
                     Row(
                       children: [
                         Expanded(
@@ -612,10 +674,23 @@ class InventoryScreen extends ConsumerWidget {
                             controller: priceController,
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(
-                                labelText: 'Price (₹)', prefixText: '₹ '),
+                                labelText: 'Retail Price (₹)', prefixText: '₹ '),
                           ),
                         ),
                         const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: wholesalePriceController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                                labelText: 'Wholesale Price (₹)', prefixText: '₹ '),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
                         Expanded(
                           child: TextField(
                             controller: stockController,
@@ -624,25 +699,65 @@ class InventoryScreen extends ConsumerWidget {
                                 const InputDecoration(labelText: 'Stock'),
                           ),
                         ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                              controller: categoryController,
+                              decoration:
+                                  const InputDecoration(labelText: 'Category')),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 12),
-                    TextField(
-                        controller: categoryController,
-                        decoration:
-                            const InputDecoration(labelText: 'Category')),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: ctx,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2024),
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null) {
+                          setState(() => selectedDate = picked);
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: 'Stock Date (Expense Date)',
+                          suffixIcon: Icon(Icons.calendar_today_rounded, size: 18),
+                        ),
+                        child: Text(DateFormatter.formatDate(selectedDate)),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Section Picker
+                    Text('Section',
+                        style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: cs.onSurfaceVariant)),
+                    const SizedBox(height: 8),
+                    SectionPicker(
+                      value: selectedSection,
+                      onChanged: (s) => setState(() => selectedSection = s),
+                    ),
                     const SizedBox(height: 24),
                     SizedBox(
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton(
-                        onPressed: () async {
+                        onPressed: isSaving ? null : () async {
+                          setState(() => isSaving = true);
                           final name = nameController.text.trim();
                           final price =
                               double.tryParse(priceController.text) ?? 0;
+                          final wholesalePrice =
+                              double.tryParse(wholesalePriceController.text) ?? 0;
                           final stock =
                               int.tryParse(stockController.text) ?? 0;
                           final category = categoryController.text.trim();
+                          final supplier = supplierController.text.trim();
                           if (name.isEmpty || price <= 0 || category.isEmpty) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
@@ -651,6 +766,7 @@ class InventoryScreen extends ConsumerWidget {
                                 backgroundColor: cs.error,
                               ),
                             );
+                            setState(() => isSaving = false);
                             return;
                           }
 
@@ -664,24 +780,65 @@ class InventoryScreen extends ConsumerWidget {
 
                           final repo = ProductRepository();
                           if (isEdit) {
+                            final int stockDifference = stock - product.stock;
                             await repo.updateProduct(product.id, {
                               'name': name,
                               'price': price,
+                              'wholesale_price': wholesalePrice,
                               'stock': stock,
                               'category': category,
+                              'section': selectedSection.firestoreValue,
+                              'supplier': supplier,
                               'imageId': imageId,
                             });
+                            
+                            // Track expense if stock was increased during edit
+                            if (stockDifference > 0 && wholesalePrice > 0) {
+                              final expense = Expense(
+                                id: '',
+                                productName: name,
+                                productId: product.id,
+                                quantity: stockDifference,
+                                cost: wholesalePrice,
+                                section: selectedSection.firestoreValue,
+                                type: 'product',
+                                remark: supplier.isNotEmpty ? 'Supplier: $supplier (Restock)' : 'Manual Stock Update',
+                                date: selectedDate,
+                                createdAt: DateTime.now(),
+                              );
+                              await ExpenseRepository().addExpense(expense);
+                            }
                           } else {
                             final newProduct = Product(
                               id: '',
                               name: name,
                               price: price,
+                              wholesalePrice: wholesalePrice,
                               stock: stock,
                               category: category,
+                              section: selectedSection.firestoreValue,
+                              supplier: supplier,
                               updatedAt: DateTime.now(),
                               imageId: imageId,
                             );
-                            await repo.addProduct(newProduct);
+                            final newId = await repo.addProduct(newProduct);
+
+                            // Auto-create expense from wholesale price × stock
+                            if (wholesalePrice > 0 && stock > 0) {
+                              final expense = Expense(
+                                id: '',
+                                productName: name,
+                                productId: newId,
+                                quantity: stock,
+                                cost: wholesalePrice,
+                                section: selectedSection.firestoreValue,
+                                type: 'product',
+                                remark: supplier.isNotEmpty ? 'Supplier: $supplier' : '',
+                                date: selectedDate,
+                                createdAt: DateTime.now(),
+                              );
+                              await ExpenseRepository().addExpense(expense);
+                            }
                           }
 
                           await AuditRepository().log(
@@ -695,10 +852,20 @@ class InventoryScreen extends ConsumerWidget {
                         style: ElevatedButton.styleFrom(
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14)),
+                          disabledBackgroundColor: cs.primary.withValues(alpha: 0.5),
                         ),
-                        child: Text(isEdit ? 'Update' : 'Add Product',
-                            style: GoogleFonts.inter(
-                                fontSize: 16, fontWeight: FontWeight.w600)),
+                        child: isSaving
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(isEdit ? 'Update' : 'Add Product',
+                                style: GoogleFonts.inter(
+                                    fontSize: 16, fontWeight: FontWeight.w600)),
                       ),
                     ),
                   ],
@@ -713,13 +880,17 @@ class InventoryScreen extends ConsumerWidget {
 
   void _showStockInDialog(BuildContext context, Product product) {
     final qtyController = TextEditingController();
+    final wholesalePriceController = TextEditingController(text: product.wholesalePrice > 0 ? product.wholesalePrice.toString() : '');
     final pos = context.pos;
     final cs = Theme.of(context).colorScheme;
+    DateTime selectedDate = DateTime.now();
+    bool isSaving = false;
 
     showDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         elevation: 0,
         backgroundColor: Theme.of(ctx).colorScheme.surface,
         child: ConstrainedBox(
@@ -747,16 +918,70 @@ class InventoryScreen extends ConsumerWidget {
                   decoration:
                       const InputDecoration(labelText: 'Quantity to Add'),
                 ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: wholesalePriceController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Wholesale Price (₹)'),
+                ),
+                const SizedBox(height: 16),
+                InkWell(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: ctx,
+                      initialDate: selectedDate,
+                      firstDate: DateTime(2024),
+                      lastDate: DateTime.now(),
+                    );
+                    if (picked != null) {
+                      setState(() => selectedDate = picked);
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Stock Date (Expense Date)',
+                      suffixIcon: Icon(Icons.calendar_today_rounded, size: 18),
+                    ),
+                    child: Text(DateFormatter.formatDate(selectedDate)),
+                  ),
+                ),
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: () async {
+                    onPressed: isSaving ? null : () async {
                       final qty = int.tryParse(qtyController.text) ?? 0;
+                      final wholesalePrice = double.tryParse(wholesalePriceController.text) ?? 0;
                       if (qty <= 0) return;
-                      await ProductRepository()
-                          .updateStock(product.id, qty);
+                      
+                      setState(() => isSaving = true);
+                      
+                      await ProductRepository().updateStock(product.id, qty);
+
+                      // Sync updated wholesale price
+                      if (wholesalePrice > 0 && wholesalePrice != product.wholesalePrice) {
+                        await ProductRepository().updateProduct(product.id, {'wholesale_price': wholesalePrice});
+                      }
+
+                      // Auto-create expense for restocked items
+                      if (wholesalePrice > 0) {
+                        final expense = Expense(
+                          id: '',
+                          productName: product.name,
+                          productId: product.id,
+                          quantity: qty,
+                          cost: wholesalePrice,
+                          section: product.section,
+                          type: 'product',
+                          remark: 'Restock',
+                          date: selectedDate,
+                          createdAt: DateTime.now(),
+                        );
+                        await ExpenseRepository().addExpense(expense);
+                      }
+
                       await AuditRepository().log(
                         action: AppConstants.auditStockIn,
                         description: 'Stock-in: ${product.name} +$qty',
@@ -766,12 +991,22 @@ class InventoryScreen extends ConsumerWidget {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: pos.success,
                       foregroundColor: Colors.white,
+                      disabledBackgroundColor: pos.success.withValues(alpha: 0.5),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14)),
                     ),
-                    child: Text('Add Stock',
-                        style: GoogleFonts.inter(
-                            fontSize: 16, fontWeight: FontWeight.w600)),
+                    child: isSaving
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text('Add Stock',
+                            style: GoogleFonts.inter(
+                                fontSize: 16, fontWeight: FontWeight.w600)),
                   ),
                 ),
               ],
@@ -779,44 +1014,196 @@ class InventoryScreen extends ConsumerWidget {
           ),
         ),
       ),
+      ),
     );
   }
 
   void _confirmDelete(BuildContext context, Product product) {
     final pos = context.pos;
+    bool isDeleting = false;
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Delete Product',
-            style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
-        content: Text(
-            'Are you sure you want to delete "${product.name}"?',
-            style: GoogleFonts.inter(fontSize: 14)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              await ProductRepository().deleteProduct(product.id);
-              await AuditRepository().log(
-                action: AppConstants.auditEdit,
-                description: 'Deleted product: ${product.name}',
-              );
-              if (ctx.mounted) Navigator.pop(ctx);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: pos.error,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text('Delete Product',
+              style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+          content: Text('Are you sure you want to delete "${product.name}"?',
+              style: GoogleFonts.inter(fontSize: 14)),
+          actions: [
+            TextButton(
+              onPressed: isDeleting ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
             ),
-            child: const Text('Delete'),
+            ElevatedButton(
+              onPressed: isDeleting
+                  ? null
+                  : () async {
+                      setState(() => isDeleting = true);
+                      await ProductRepository().deleteProduct(product.id);
+                      await AuditRepository().log(
+                        action: AppConstants.auditEdit,
+                        description: 'Deleted product: ${product.name}',
+                      );
+                      if (ctx.mounted) Navigator.pop(ctx);
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: pos.error,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: pos.error.withValues(alpha: 0.5),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: isDeleting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showLowStockDetails(BuildContext context, List<Product> lowStockProducts) {
+    final cs = Theme.of(context).colorScheme;
+    final pos = context.pos;
+    bool isExporting = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => Dialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          elevation: 0,
+          backgroundColor: cs.surface,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text('Low Stock Items',
+                        style: GoogleFonts.inter(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.4)),
+                    const Spacer(),
+                    ElevatedButton.icon(
+                      onPressed: isExporting
+                          ? null
+                          : () async {
+                              setState(() => isExporting = true);
+                              try {
+                                await CsvExporter.exportLowStockReport(
+                                    lowStockProducts);
+                                if (ctx.mounted) {
+                                  ScaffoldMessenger.of(ctx).showSnackBar(
+                                    const SnackBar(
+                                        content: Text(
+                                            'Exported Low Stock Report to CSV')),
+                                  );
+                                }
+                              } finally {
+                                if (ctx.mounted) {
+                                  setState(() => isExporting = false);
+                                }
+                              }
+                            },
+                      icon: isExporting
+                          ? SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: cs.primary,
+                              ),
+                            )
+                          : const Icon(Icons.download_rounded, size: 16),
+                      label: const Text('Export CSV'),
+                      style: ElevatedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(ctx),
+                      child: Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: cs.onSurfaceVariant.withValues(alpha: 0.08),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.close_rounded,
+                            size: 16, color: cs.onSurfaceVariant),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: lowStockProducts.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final product = lowStockProducts[index];
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(product.name,
+                            style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+                        subtitle: Text(product.category,
+                            style: GoogleFonts.inter(fontSize: 12, color: cs.onSurfaceVariant)),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: pos.error.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text('${product.stock} in stock',
+                                  style: GoogleFonts.inter(
+                                      color: pos.error,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600)),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(Icons.add_shopping_cart_rounded, size: 20),
+                              color: cs.primary,
+                              tooltip: 'Restock',
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                _showStockInDialog(context, product);
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
-        ],
+        ),
+      ),
       ),
     );
   }
@@ -929,6 +1316,16 @@ class _PhoneProductCard extends StatelessWidget {
                         color: cs.onSurface,
                       ),
                     ),
+                    if (product.wholesalePrice > 0) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        '(Cost: ${CurrencyFormatter.format(product.wholesalePrice)})',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                     const SizedBox(width: 12),
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -948,6 +1345,16 @@ class _PhoneProductCard extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (product.supplier.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Supplier: ${product.supplier}',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/constants/app_constants.dart';
+import '../../data/models/student_model.dart';
 
 /// Callback for reporting sync progress: (processed, total)
 typedef SyncProgressCallback = void Function(int processed, int total);
@@ -10,12 +11,14 @@ typedef SyncProgressCallback = void Function(int processed, int total);
 class StudentSyncResult {
   final int totalFetched;
   final int newlyAdded;
+  final int updated;
   final int alreadyExisted;
   final String? error;
 
   const StudentSyncResult({
     required this.totalFetched,
     required this.newlyAdded,
+    required this.updated,
     required this.alreadyExisted,
     this.error,
   });
@@ -25,6 +28,7 @@ class StudentSyncResult {
   factory StudentSyncResult.failure(String message) => StudentSyncResult(
         totalFetched: 0,
         newlyAdded: 0,
+        updated: 0,
         alreadyExisted: 0,
         error: message,
       );
@@ -33,9 +37,9 @@ class StudentSyncResult {
 /// Service to sync students from an external GraphQL API into Firestore.
 ///
 /// Key guarantees:
-/// - NEVER updates existing student records
 /// - NEVER modifies wallets, balances, or debt
-/// - ONLY inserts students that don't already exist
+/// - Inserts students that don't already exist
+/// - Updates names of existing students if they have changed
 /// - Uses studentId as Firestore document ID to enforce uniqueness
 /// - Uses batch writes for performance
 class StudentSyncService {
@@ -79,11 +83,12 @@ class StudentSyncService {
         return const StudentSyncResult(
           totalFetched: 0,
           newlyAdded: 0,
+          updated: 0,
           alreadyExisted: 0,
         );
       }
 
-      // ── Step 2: Sync to Firestore (insert-only, no updates) ──
+      // ── Step 2: Sync to Firestore (insert new, update changed) ──
       return await _syncToFirestore(students, onProgress: onProgress);
     } on http.ClientException catch (e) {
       return StudentSyncResult.failure('Network error: ${e.message}');
@@ -175,6 +180,7 @@ class StudentSyncService {
         _firestore.collection(AppConstants.studentsCollection);
 
     int newlyAdded = 0;
+    int updated = 0;
     int alreadyExisted = 0;
     final total = students.length;
 
@@ -186,46 +192,53 @@ class StudentSyncService {
     for (int i = 0; i < students.length; i++) {
       final student = students[i];
       final studentId = student['studentId']!;
+      final newName = student['fullName']!;
 
-      // Check if student already exists
       final doc = await collection.doc(studentId).get();
 
       if (doc.exists) {
-        alreadyExisted++;
-      } else {
-        // Student doesn't exist — queue for batch write
-        batch ??= _firestore.batch();
+        final data = doc.data() ?? {};
+        final existingName = data['name'] as String?;
 
-        final docRef = collection.doc(studentId);
-        batch.set(docRef, {
-          'name': student['fullName']!,
+        if (existingName != newName) {
+          batch ??= _firestore.batch();
+          batch.update(collection.doc(studentId), {
+            'name': newName,
+            'search_terms': Student.generateSearchTerms(newName),
+            'updated_at': FieldValue.serverTimestamp(),
+          });
+          updated++;
+          opsInBatch++;
+        } else {
+          alreadyExisted++;
+        }
+      } else {
+        batch ??= _firestore.batch();
+        batch.set(collection.doc(studentId), {
+          'name': newName,
           'balance': 0,
           'debt': 0,
+          'search_terms': Student.generateSearchTerms(newName),
           'created_at': FieldValue.serverTimestamp(),
           'updated_at': FieldValue.serverTimestamp(),
         });
-
         newlyAdded++;
         opsInBatch++;
-
-        // Commit if batch is getting full
-        if (opsInBatch >= batchSize) {
-          await batch.commit();
-          batch = null;
-          opsInBatch = 0;
-        }
       }
 
-      // Report progress
+      if (opsInBatch >= batchSize) {
+        await batch!.commit();
+        batch = null;
+        opsInBatch = 0;
+      }
+
       onProgress?.call(i + 1, total);
 
-      // Yield to event loop every 5 students so UI can repaint
       if ((i + 1) % 5 == 0) {
         await Future.delayed(Duration.zero);
       }
     }
 
-    // Commit remaining operations
     if (batch != null && opsInBatch > 0) {
       await batch.commit();
     }
@@ -233,6 +246,7 @@ class StudentSyncService {
     return StudentSyncResult(
       totalFetched: students.length,
       newlyAdded: newlyAdded,
+      updated: updated,
       alreadyExisted: alreadyExisted,
     );
   }

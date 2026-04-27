@@ -1,13 +1,16 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/pos_colors.dart';
 import '../../../core/utils/currency_formatter.dart';
-import '../../../core/services/local_storage_service.dart';
 import '../../../data/models/cart_item_model.dart';
-import '../../../providers/cart_providers.dart';
+import '../../../providers/multi_cart_provider.dart';
 
+/// Cart item row redesigned for 10" tablet usability.
+/// Uses a two-row layout:
+///   Row 1: Product name (full width) + subtotal
+///   Row 2: Unit price + quantity stepper + delete button
+/// No thumbnail image — saves space so names display fully.
 class CartItemRow extends ConsumerWidget {
   final CartItem item;
 
@@ -21,106 +24,202 @@ class CartItemRow extends ConsumerWidget {
 
     return Dismissible(
       key: ValueKey(item.productId),
-      direction: DismissDirection.endToStart,
+      direction: DismissDirection.horizontal,
+      // ─── Swipe Right (Start to End): Reduce Quantity ───
       background: Container(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 24),
+        decoration: BoxDecoration(
+          color: pos.info.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.remove_circle_outline_rounded, color: pos.info, size: 24),
+            const SizedBox(height: 4),
+            Text(
+              item.quantity > 1 
+                ? '${item.quantity} → ${item.quantity - 1}' 
+                : 'Remove',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: pos.info,
+              ),
+            ),
+          ],
+        ),
+      ),
+      // ─── Swipe Left (End to Start): Remove Item ───
+      secondaryBackground: Container(
         alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 16),
+        padding: const EdgeInsets.only(right: 24),
         decoration: BoxDecoration(
           color: pos.error.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Icon(Icons.delete_outline_rounded, color: pos.error, size: 20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.delete_outline_rounded, color: pos.error, size: 24),
+            const SizedBox(height: 4),
+            Text(
+              'Remove',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: pos.error,
+              ),
+            ),
+          ],
+        ),
       ),
-      onDismissed: (_) {
-        ref.read(cartProvider.notifier).removeItem(item.productId);
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.startToEnd) {
+          // Swipe Right: Reduce quantity
+          if (item.quantity > 1) {
+            ref.read(multiCartProvider.notifier).decrementQuantity(item.productId);
+            // Snap back
+            return false;
+          }
+          // If quantity is 1, return true to remove via onDismissed
+          return true;
+        }
+        // Swipe Left: Remove via onDismissed
+        return true;
+      },
+      onDismissed: (direction) {
+        // In both cases where it's dismissed, we remove it.
+        // If it was Swipe Right with Qty=1, or Swipe Left (always Remove)
+        ref.read(multiCartProvider.notifier).removeItem(item.productId);
       },
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Dynamic image placeholder
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF4F5F7),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: item.imageId == null
-                  ? Icon(
-                      Icons.image_outlined,
-                      size: 20,
-                      color: cs.onSurfaceVariant.withValues(alpha: 0.3),
-                    )
-                  : FutureBuilder<Uint8List?>(
-                      future: LocalStorageService()
-                          .getProductImageBytes(item.imageId!),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasData && snapshot.data != null) {
-                          return ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.memory(
-                              snapshot.data!,
-                              fit: BoxFit.cover,
-                            ),
-                          );
-                        }
-                        return Icon(
-                          Icons.image_outlined,
-                          size: 20,
-                          color: cs.onSurfaceVariant.withValues(alpha: 0.3),
-                        );
-                      },
-                    ),
-            ),
-            const SizedBox(width: 12),
-            // Product info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
+            // ─── Row 1: Product name + Subtotal ───
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
                     item.name,
                     style: GoogleFonts.inter(
-                      fontSize: 13,
+                      fontSize: 15,
                       fontWeight: FontWeight.w600,
                       color: cs.onSurface,
+                      height: 1.3,
                     ),
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    CurrencyFormatter.format(item.price),
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: cs.onSurfaceVariant,
-                    ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  CurrencyFormatter.format(subtotal),
+                  style: GoogleFonts.inter(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: cs.onSurface,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
 
-            const SizedBox(width: 8),
+            const SizedBox(height: 8),
 
-            // Quantity stepper
-            _QuantityStepper(item: item),
-
-            const SizedBox(width: 12),
-
-            // Subtotal
-            SizedBox(
-              width: 64,
-              child: Text(
-                CurrencyFormatter.format(subtotal),
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: cs.onSurface,
+            // ─── Row 2: Unit price + Stepper + Delete ───
+            Row(
+              children: [
+                // Unit price
+                Text(
+                  '${CurrencyFormatter.format(item.price)} each',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                  ),
                 ),
-                textAlign: TextAlign.right,
-              ),
+
+                const Spacer(),
+
+                // Quantity stepper — large touch targets
+                Container(
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: cs.onSurfaceVariant.withValues(alpha: 0.1),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Minus button
+                      _StepperButton(
+                        icon: Icons.remove_rounded,
+                        iconColor: cs.onSurfaceVariant,
+                        onTap: () {
+                          ref.read(multiCartProvider.notifier)
+                              .decrementQuantity(item.productId);
+                        },
+                      ),
+                      // Quantity
+                      Container(
+                        width: 36,
+                        alignment: Alignment.center,
+                        child: Text(
+                          '${item.quantity}',
+                          style: GoogleFonts.inter(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: cs.onSurface,
+                          ),
+                        ),
+                      ),
+                      // Plus button
+                      _StepperButton(
+                        icon: Icons.add_rounded,
+                        iconColor: cs.primary,
+                        onTap: () {
+                          ref.read(multiCartProvider.notifier)
+                              .incrementQuantity(item.productId);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(width: 10),
+
+                // ─── Explicit Delete Button ───
+                GestureDetector(
+                  onTap: () {
+                    ref.read(multiCartProvider.notifier)
+                        .removeItem(item.productId);
+                  },
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: pos.error.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: pos.error.withValues(alpha: 0.15),
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.close_rounded,
+                      size: 20,
+                      color: pos.error,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -129,58 +228,7 @@ class CartItemRow extends ConsumerWidget {
   }
 }
 
-class _QuantityStepper extends ConsumerWidget {
-  final CartItem item;
-
-  const _QuantityStepper({required this.item});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final cs = Theme.of(context).colorScheme;
-    final pos = context.pos;
-    return Container(
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: cs.onSurfaceVariant.withValues(alpha: 0.15)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _StepperButton(
-            icon: item.quantity == 1
-                ? Icons.delete_outline_rounded
-                : Icons.remove_rounded,
-            iconColor: item.quantity == 1 ? pos.error : cs.onSurfaceVariant,
-            onTap: () {
-              ref.read(cartProvider.notifier).decrementQuantity(item.productId);
-            },
-          ),
-          SizedBox(
-            width: 24,
-            child: Text(
-              '${item.quantity}',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: cs.onSurface,
-              ),
-            ),
-          ),
-          _StepperButton(
-            icon: Icons.add_rounded,
-            iconColor: cs.onSurfaceVariant,
-            onTap: () {
-              ref.read(cartProvider.notifier).incrementQuantity(item.productId);
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
+/// Large 40×40 stepper button with tap feedback
 class _StepperButton extends StatefulWidget {
   final IconData icon;
   final Color iconColor;
@@ -230,12 +278,13 @@ class _StepperButtonState extends State<_StepperButton>
       onTapCancel: () => _controller.reverse(),
       child: AnimatedBuilder(
         animation: _scale,
-        builder: (_, child) => Transform.scale(scale: _scale.value, child: child),
+        builder: (_, child) =>
+            Transform.scale(scale: _scale.value, child: child),
         child: SizedBox(
-          width: 32,
-          height: 32,
+          width: 40,
+          height: 40,
           child: Center(
-            child: Icon(widget.icon, size: 16, color: widget.iconColor),
+            child: Icon(widget.icon, size: 20, color: widget.iconColor),
           ),
         ),
       ),

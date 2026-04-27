@@ -93,4 +93,39 @@ class TransactionRepository {
 
     return snapshot.docs.map(StoreTransaction.fromFirestore).toList();
   }
+
+  /// Get paginated transactions
+  Future<List<StoreTransaction>> getPaginatedTransactions({
+    DocumentSnapshot? startAfter,
+    int limit = 20,
+    bool? isVoidedFilter,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    Query query = _collection;
+
+    if (isVoidedFilter != null) {
+      query = query.where('is_voided', isEqualTo: isVoidedFilter);
+    }
+
+    if (startDate != null) {
+      query = query.where('created_at', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate));
+    }
+
+    if (endDate != null) {
+      query = query.where('created_at', isLessThan: Timestamp.fromDate(endDate));
+    }
+
+    // Must order by created_at since we might use it in where clauses or generally want sort
+    query = query.orderBy('created_at', descending: true);
+
+    if (startAfter != null) {
+      query = query.startAfterDocument(startAfter);
+    }
+
+    query = query.limit(limit);
+
+    final snapshot = await query.get();
+    return snapshot.docs.map(StoreTransaction.fromFirestore).toList();
+  }
 }

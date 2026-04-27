@@ -1,14 +1,26 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/repositories/transaction_repository.dart';
 import '../data/models/transaction_model.dart';
+import '../core/constants/store_section.dart';
 import 'analytics_providers.dart';
+import 'store_section_provider.dart';
 
 // ─── Filtered Analytics Transactions ───
 final filteredTransactionsProvider = StreamProvider<List<StoreTransaction>>((ref) {
   final repo = ref.watch(transactionRepositoryProvider);
   final dateRange = ref.watch(analyticsResolvedDateRangeProvider);
-  if (dateRange == null) return repo.getTransactions();
-  return repo.getTransactionsByDateRange(dateRange.start, dateRange.end);
+  final section = ref.watch(storeSectionProvider);
+  
+  final stream = dateRange == null
+      ? repo.getTransactions()
+      : repo.getTransactionsByDateRange(dateRange.start, dateRange.end);
+  
+  if (section == StoreSection.all) return stream;
+  // combined transactions appear in BOTH cafe and store filters
+  return stream.map((list) => list.where((t) {
+    if (t.section == 'combined') return true;
+    return t.section == section.firestoreValue;
+  }).toList());
 });
 
 // ─── Repository Provider ───
@@ -40,8 +52,17 @@ final monthlyTransactionsProvider = StreamProvider<List<StoreTransaction>>((ref)
 // ─── Today's Sales Total ───
 final todaySalesProvider = Provider<double>((ref) {
   final txns = ref.watch(todayTransactionsProvider);
+  final section = ref.watch(storeSectionProvider);
   return txns.maybeWhen(
-    data: (list) => list.where((t) => !t.isVoided).fold(0.0, (sum, t) => sum + t.paidAmount),
+    data: (list) {
+      var filtered = list.where((t) => !t.isVoided);
+      if (section != StoreSection.all) {
+        // combined bills count in both cafe and store
+        filtered = filtered.where((t) =>
+            t.section == section.firestoreValue || t.section == 'combined');
+      }
+      return filtered.fold(0.0, (sum, t) => sum + t.paidAmount);
+    },
     orElse: () => 0.0,
   );
 });
@@ -49,8 +70,16 @@ final todaySalesProvider = Provider<double>((ref) {
 // ─── Today's Transaction Count ───
 final todayTransactionCountProvider = Provider<int>((ref) {
   final txns = ref.watch(todayTransactionsProvider);
+  final section = ref.watch(storeSectionProvider);
   return txns.maybeWhen(
-    data: (list) => list.where((t) => !t.isVoided).length,
+    data: (list) {
+      var filtered = list.where((t) => !t.isVoided);
+      if (section != StoreSection.all) {
+        filtered = filtered.where((t) =>
+            t.section == section.firestoreValue || t.section == 'combined');
+      }
+      return filtered.length;
+    },
     orElse: () => 0,
   );
 });

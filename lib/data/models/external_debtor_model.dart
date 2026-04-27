@@ -1,10 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-class Student {
+class ExternalDebtor {
   /// Generate search terms for Firestore array-contains queries.
-  /// Creates all lowercase prefixes of each word in the name.
-  /// e.g., "Ahamed Yaseen" → ["a","ah","aha","aham","ahame","ahamed","y","ya","yas","yase","yasee","yaseen"]
-  /// This enables searching by the beginning of ANY word in the name.
   static List<String> generateSearchTerms(String name) {
     final words = name.toLowerCase().trim().split(RegExp(r'\s+'));
     final terms = <String>{};
@@ -16,46 +13,39 @@ class Student {
     return terms.toList()..sort();
   }
 
-  final String id; // admission number
+  final String id;
   final String name;
-  final double balance;
   final double debt;
   final DateTime updatedAt;
 
-  const Student({
+  const ExternalDebtor({
     required this.id,
     required this.name,
-    required this.balance,
     required this.debt,
     required this.updatedAt,
   });
 
   bool get hasDebt => debt > 0;
-  bool get hasBalance => balance > 0;
-  double get netBalance => balance - debt;
 
-  Student copyWith({
+  ExternalDebtor copyWith({
     String? id,
     String? name,
-    double? balance,
     double? debt,
     DateTime? updatedAt,
   }) {
-    return Student(
+    return ExternalDebtor(
       id: id ?? this.id,
       name: name ?? this.name,
-      balance: balance ?? this.balance,
       debt: debt ?? this.debt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 
-  factory Student.fromFirestore(DocumentSnapshot doc) {
+  factory ExternalDebtor.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
-    return Student(
+    return ExternalDebtor(
       id: doc.id,
       name: data['name'] ?? '',
-      balance: (data['balance'] ?? 0).toDouble(),
       debt: (data['debt'] ?? 0).toDouble(),
       updatedAt: (data['updated_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
@@ -64,7 +54,6 @@ class Student {
   Map<String, dynamic> toFirestore() {
     return {
       'name': name,
-      'balance': balance,
       'debt': debt,
       'search_terms': generateSearchTerms(name),
       'updated_at': FieldValue.serverTimestamp(),
@@ -73,7 +62,7 @@ class Student {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) || other is Student && id == other.id;
+      identical(this, other) || other is ExternalDebtor && id == other.id;
 
   @override
   int get hashCode => id.hashCode;

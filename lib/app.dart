@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
+import 'core/widgets/connectivity_overlay.dart';
 import 'features/splash/splash_screen.dart';
 import 'providers/theme_provider.dart';
 
@@ -22,6 +23,11 @@ class CarbonGurukulamStoreApp extends ConsumerWidget {
       themeAnimationDuration: const Duration(milliseconds: 350),
       themeAnimationCurve: Curves.easeInOut,
       home: const SplashScreen(),
+      builder: (context, child) {
+        return ConnectivityOverlay(
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
     );
   }
 }

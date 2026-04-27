@@ -1,3 +1,5 @@
+rootProject.name = "carbon_stores_android"
+
 pluginManagement {
     val flutterSdkPath =
         run {

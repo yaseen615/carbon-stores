@@ -6,16 +6,24 @@ import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/responsive_helper.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/constants/store_section.dart';
+import '../../core/widgets/section_toggle.dart';
 import '../../data/models/expense_model.dart';
 import '../../data/repositories/expense_repository.dart';
 import '../../data/repositories/audit_repository.dart';
 import '../../providers/expense_providers.dart';
+import '../../providers/store_section_provider.dart';
 
-class ExpensesScreen extends ConsumerWidget {
+class ExpensesScreen extends ConsumerStatefulWidget {
   const ExpensesScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ExpensesScreen> createState() => _ExpensesScreenState();
+}
+
+class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
+  @override
+  Widget build(BuildContext context) {
     final expensesAsync = ref.watch(expensesStreamProvider);
     final totalExpenses = ref.watch(totalExpensesProvider);
     final cs = Theme.of(context).colorScheme;
@@ -40,6 +48,8 @@ class ExpensesScreen extends ConsumerWidget {
                         fontSize: 28,
                         fontWeight: FontWeight.w700,
                         letterSpacing: -0.4)),
+                const SizedBox(width: 16),
+                const SectionToggle(),
                 const Spacer(),
                 _buildTotalBadge(pos, totalExpenses),
                 const SizedBox(width: 12),
@@ -58,6 +68,8 @@ class ExpensesScreen extends ConsumerWidget {
                             fontSize: 24,
                             fontWeight: FontWeight.w700,
                             letterSpacing: -0.4)),
+                    const Spacer(),
+                    const SectionToggle(compact: true),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -107,6 +119,7 @@ class ExpensesScreen extends ConsumerWidget {
                     separatorBuilder: (_, __) => const SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       final expense = expenses[index];
+                      final isProduct = expense.isProductExpense;
                       return Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
@@ -127,45 +140,86 @@ class ExpensesScreen extends ConsumerWidget {
                         ),
                         child: Row(
                           children: [
-                            // Icon
                             Container(
                               width: 40,
                               height: 40,
                               decoration: BoxDecoration(
-                                color: pos.error.withValues(alpha: 0.1),
+                                color: isProduct
+                                    ? cs.primary.withValues(alpha: 0.1)
+                                    : pos.error.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: Icon(Icons.receipt_long_rounded,
-                                  size: 20, color: pos.error),
+                              child: Icon(
+                                isProduct ? Icons.inventory_2_rounded : Icons.receipt_long_rounded,
+                                size: 20,
+                                color: isProduct ? cs.primary : pos.error,
+                              ),
                             ),
                             const SizedBox(width: 14),
-                            // Details
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    expense.productName,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                      color: cs.onSurface,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                  Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          expense.productName,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w600,
+                                            color: cs.onSurface,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: isProduct
+                                              ? cs.primary.withValues(alpha: 0.1)
+                                              : pos.warning.withValues(alpha: 0.1),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          isProduct ? 'Product' : 'Other',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: isProduct ? cs.primary : pos.warning,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    '${expense.quantity} × ${CurrencyFormatter.format(expense.cost)} • ${DateFormatter.formatDate(expense.date)}',
+                                    isProduct
+                                        ? '${expense.quantity} × ${CurrencyFormatter.format(expense.cost)} • ${DateFormatter.formatDate(expense.date)}'
+                                        : DateFormatter.formatDate(expense.date),
                                     style: GoogleFonts.inter(
                                       fontSize: 12,
                                       color: cs.onSurfaceVariant,
                                     ),
                                   ),
+                                  if (expense.remark.isNotEmpty) ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      expense.remark,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11,
+                                        fontStyle: FontStyle.italic,
+                                        color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
-                            // Total + delete
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
@@ -229,15 +283,35 @@ class ExpensesScreen extends ConsumerWidget {
                         columnSpacing: 32,
                         dividerThickness: 0.5,
                         columns: [
-                          DataColumn(label: Text('Product', style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12))),
+                          DataColumn(label: Text('Type', style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12))),
+                          DataColumn(label: Text('Description', style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12))),
                           DataColumn(label: Text('Qty', style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12)), numeric: true),
                           DataColumn(label: Text('Cost/Unit', style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12)), numeric: true),
                           DataColumn(label: Text('Total', style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12)), numeric: true),
+                          DataColumn(label: Text('Remark', style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12))),
                           DataColumn(label: Text('Date', style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12))),
                           DataColumn(label: Text('', style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12))),
                         ],
                         rows: expenses.map((expense) {
+                          final isProduct = expense.isProductExpense;
                           return DataRow(cells: [
+                            DataCell(Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: isProduct
+                                    ? cs.primary.withValues(alpha: 0.1)
+                                    : pos.warning.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                isProduct ? 'Product' : 'Other',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: isProduct ? cs.primary : pos.warning,
+                                ),
+                              ),
+                            )),
                             DataCell(Text(expense.productName,
                                 style: GoogleFonts.inter(
                                     fontWeight: FontWeight.w500))),
@@ -249,6 +323,14 @@ class ExpensesScreen extends ConsumerWidget {
                               style: GoogleFonts.inter(
                                   fontWeight: FontWeight.w600,
                                   color: pos.error),
+                            )),
+                            DataCell(Text(
+                              expense.remark.isNotEmpty ? expense.remark : '—',
+                              style: GoogleFonts.inter(
+                                  color: expense.remark.isNotEmpty
+                                      ? cs.onSurfaceVariant
+                                      : cs.onSurfaceVariant.withValues(alpha: 0.3),
+                                  fontStyle: expense.remark.isNotEmpty ? FontStyle.italic : null),
                             )),
                             DataCell(Text(
                                 DateFormatter.formatDate(expense.date),
@@ -341,12 +423,18 @@ class ExpensesScreen extends ConsumerWidget {
     );
   }
 
+  /// Simplified form for manual "other" expenses (rent, salary, etc.)
+  /// Product expenses are auto-created when items are added/restocked in Inventory.
   void _showExpenseForm(BuildContext context) {
-    final productController = TextEditingController();
-    final quantityController = TextEditingController();
-    final costController = TextEditingController();
+    final descriptionController = TextEditingController();
+    final amountController = TextEditingController();
+    final remarkController = TextEditingController();
     DateTime selectedDate = DateTime.now();
     final cs = Theme.of(context).colorScheme;
+    StoreSection selectedSection = ref.read(storeSectionProvider) == StoreSection.all
+        ? StoreSection.store
+        : ref.read(storeSectionProvider);
+    bool isSaving = false;
 
     showDialog(
       context: context,
@@ -366,7 +454,7 @@ class ExpensesScreen extends ConsumerWidget {
                 children: [
                   Row(
                     children: [
-                      Text('Add Expense',
+                      Text('Add Other Expense',
                           style: GoogleFonts.inter(
                               fontSize: 20,
                               fontWeight: FontWeight.w700,
@@ -387,33 +475,36 @@ class ExpensesScreen extends ConsumerWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Product expenses are auto-added from inventory.\nUse this for rent, salary, utilities, etc.',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: cs.onSurfaceVariant,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
                   TextField(
-                    controller: productController,
+                    controller: descriptionController,
                     decoration: const InputDecoration(
-                        labelText: 'Product / Description'),
+                        labelText: 'Description (e.g. Rent, Salary)'),
                   ),
                   const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: quantityController,
-                          keyboardType: TextInputType.number,
-                          decoration:
-                              const InputDecoration(labelText: 'Quantity'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: costController,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                              labelText: 'Cost/Unit (₹)', prefixText: '₹ '),
-                        ),
-                      ),
-                    ],
+                  TextField(
+                    controller: amountController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                        labelText: 'Amount (₹)', prefixText: '₹ '),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: remarkController,
+                    decoration: const InputDecoration(
+                      labelText: 'Remark (optional)',
+                    ),
+                    maxLines: 2,
+                    minLines: 1,
                   ),
                   const SizedBox(height: 12),
                   InkWell(
@@ -438,22 +529,33 @@ class ExpensesScreen extends ConsumerWidget {
                       child: Text(DateFormatter.formatDate(selectedDate)),
                     ),
                   ),
+                  const SizedBox(height: 16),
+                  Text('Section',
+                      style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: cs.onSurfaceVariant)),
+                  const SizedBox(height: 8),
+                  SectionPicker(
+                    value: selectedSection,
+                    onChanged: (s) => setState(() => selectedSection = s),
+                  ),
                   const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton(
-                      onPressed: () async {
-                        final product = productController.text.trim();
-                        final quantity =
-                            int.tryParse(quantityController.text) ?? 0;
-                        final cost =
-                            double.tryParse(costController.text) ?? 0;
-                        if (product.isEmpty || quantity <= 0 || cost <= 0) {
+                      onPressed: isSaving ? null : () async {
+                        setState(() => isSaving = true);
+                        final description = descriptionController.text.trim();
+                        final amount =
+                            double.tryParse(amountController.text) ?? 0;
+                        if (description.isEmpty || amount <= 0) {
+                          setState(() => isSaving = false);
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: const Text(
-                                  'Please fill out all fields with valid values'),
+                                  'Please fill out description and amount'),
                               backgroundColor: cs.error,
                             ),
                           );
@@ -462,9 +564,12 @@ class ExpensesScreen extends ConsumerWidget {
 
                         final expense = Expense(
                           id: '',
-                          productName: product,
-                          quantity: quantity,
-                          cost: cost,
+                          productName: description,
+                          quantity: 1,
+                          cost: amount,
+                          section: selectedSection.firestoreValue,
+                          type: 'other',
+                          remark: remarkController.text.trim(),
                           date: selectedDate,
                           createdAt: DateTime.now(),
                         );
@@ -472,7 +577,7 @@ class ExpensesScreen extends ConsumerWidget {
                         await AuditRepository().log(
                           action: AppConstants.auditExpense,
                           description:
-                              'Expense: $product — ${CurrencyFormatter.format(cost * quantity)}',
+                              'Expense: $description — ${CurrencyFormatter.format(amount)}',
                         );
                         if (ctx.mounted) Navigator.pop(ctx);
                       },
@@ -480,9 +585,18 @@ class ExpensesScreen extends ConsumerWidget {
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14)),
                       ),
-                      child: Text('Add Expense',
-                          style: GoogleFonts.inter(
-                              fontSize: 16, fontWeight: FontWeight.w600)),
+                      child: isSaving
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text('Add Expense',
+                              style: GoogleFonts.inter(
+                                  fontSize: 16, fontWeight: FontWeight.w600)),
                     ),
                   ),
                 ],
