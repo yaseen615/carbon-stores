@@ -12,8 +12,9 @@ import '../../data/repositories/student_repository.dart';
 import '../../data/repositories/audit_repository.dart';
 import '../../core/constants/app_constants.dart';
 import '../../providers/student_providers.dart';
+import '../../providers/navigation_provider.dart';
 import 'widgets/student_detail_dialog.dart';
-
+import 'widgets/balance_details_dialog.dart';
 class StudentsScreen extends ConsumerStatefulWidget {
   const StudentsScreen({super.key});
 
@@ -366,11 +367,20 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
                   label: 'Balance',
                   value: CurrencyFormatter.formatCompact(totalBalance),
                   color: pos.info,
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (_) => const BalanceDetailsDialog(),
+                    );
+                  },
                 ),
                 _StatChip(
                   label: 'Debt',
                   value: CurrencyFormatter.formatCompact(totalDebt),
                   color: pos.error,
+                  onTap: () {
+                    ref.read(currentPageProvider.notifier).state = AppPage.debts;
+                  },
                 ),
                 _SyncButton(isSyncing: _isSyncing, onPressed: _syncStudents),
                 ElevatedButton.icon(
@@ -1304,41 +1314,50 @@ class _StatChip extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
+  final VoidCallback? onTap;
 
   const _StatChip({
     required this.label,
     required this.value,
     required this.color,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            style: GoogleFonts.inter(
-              color: color.withValues(alpha: 0.6),
-              fontSize: 12,
-            ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
           ),
-          const SizedBox(width: 6),
-          Text(
-            value,
-            style: GoogleFonts.inter(
-              color: color,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  color: color.withValues(alpha: 0.6),
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                value,
+                style: GoogleFonts.inter(
+                  color: color,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

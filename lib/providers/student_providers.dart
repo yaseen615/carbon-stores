@@ -180,18 +180,18 @@ final studentsStreamProvider = StreamProvider<List<Student>>((ref) {
 });
 
 final totalWalletBalanceProvider = Provider<double>((ref) {
-  final statsAsync = ref.watch(studentStatsProvider);
-  return statsAsync.when(
-    data: (stats) => stats.totalBalance,
+  final studentsAsync = ref.watch(studentsStreamProvider);
+  return studentsAsync.when(
+    data: (students) => students.fold<double>(0, (total, s) => total + s.balance),
     loading: () => 0.0,
     error: (_, __) => 0.0,
   );
 });
 
 final totalDebtProvider = Provider<double>((ref) {
-  final statsAsync = ref.watch(studentStatsProvider);
-  return statsAsync.when(
-    data: (stats) => stats.totalDebt,
+  final studentsAsync = ref.watch(studentsStreamProvider);
+  return studentsAsync.when(
+    data: (students) => students.fold<double>(0, (total, s) => total + s.debt),
     loading: () => 0.0,
     error: (_, __) => 0.0,
   );
