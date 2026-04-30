@@ -7,6 +7,7 @@ import '../../core/constants/store_section.dart';
 import '../../core/theme/pos_colors.dart';
 import '../../providers/product_providers.dart';
 import '../../providers/multi_cart_provider.dart';
+import '../../providers/student_providers.dart';
 import 'widgets/product_grid.dart';
 import 'widgets/cart_panel.dart';
 import 'widgets/category_tabs.dart';
@@ -43,9 +44,28 @@ class PosScreen extends ConsumerWidget {
           child: IconButton(
             icon: const Icon(Icons.refresh_rounded, size: 22),
             color: cs.onSurfaceVariant,
-            tooltip: 'Refresh Products',
-            onPressed: () {
+            tooltip: 'Refresh Data',
+            onPressed: () async {
+              // 1. Invalidate streams
               ref.invalidate(productsStreamProvider);
+              ref.invalidate(studentsStreamProvider);
+
+              // 2. Refresh linked students in cart sessions
+              final multiCart = ref.read(multiCartProvider);
+              final studentIds = multiCart.sessions
+                  .map((s) => s.linkedStudent?.id)
+                  .whereType<String>()
+                  .toList();
+                  
+              if (studentIds.isNotEmpty) {
+                try {
+                  final repo = ref.read(studentRepositoryProvider);
+                  final latestStudents = await repo.getStudentsByIds(studentIds);
+                  ref.read(multiCartProvider.notifier).refreshLinkedStudents(latestStudents);
+                } catch (_) {
+                  // ignore
+                }
+              }
             },
           ),
         ),

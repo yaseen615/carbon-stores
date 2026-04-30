@@ -171,6 +171,25 @@ class MultiCartNotifier extends StateNotifier<MultiCartState> {
     }
   }
 
+  /// Update linked students across all sessions with fresh data
+  void refreshLinkedStudents(List<Student> freshStudents) {
+    final updatedSessions = state.sessions.map((session) {
+      if (session.linkedStudent != null) {
+        final studentId = session.linkedStudent!.id;
+        try {
+          final fresh = freshStudents.firstWhere((s) => s.id == studentId);
+          return session.copyWith(linkedStudent: fresh);
+        } catch (_) {
+          // Keep old if not found
+          return session;
+        }
+      }
+      return session;
+    }).toList();
+    
+    state = state.copyWith(sessions: updatedSessions);
+  }
+
   // ─── Cart Operations (on active session) ───
 
   void addProduct(Product product) {

@@ -321,6 +321,7 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
     try {
       ref.read(paginatedStudentsProvider.notifier).refresh();
       ref.invalidate(studentStatsProvider);
+      ref.invalidate(studentsStreamProvider); // Refresh search data too
     } finally {
       if (mounted) setState(() => _isRefreshing = false);
     }

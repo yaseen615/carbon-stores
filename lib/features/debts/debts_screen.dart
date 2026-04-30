@@ -19,8 +19,44 @@ class DebtsScreen extends ConsumerStatefulWidget {
   ConsumerState<DebtsScreen> createState() => _DebtsScreenState();
 }
 
+enum DebtorFilter { all, students, external }
+enum DebtorSort { debtDesc, debtAsc, nameAsc, nameDesc, dateDesc, dateAsc }
+enum DateFilter { allTime, today, thisMonth, custom }
+
 class _DebtsScreenState extends ConsumerState<DebtsScreen> {
   String _searchQuery = '';
+  DebtorFilter _filter = DebtorFilter.all;
+  DebtorSort _sort = DebtorSort.debtDesc;
+  DateFilter _dateFilter = DateFilter.allTime;
+  DateTimeRange? _customDateRange;
+
+  Future<void> _selectCustomDateRange() async {
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+                  primary: Theme.of(context).colorScheme.primary,
+                  onPrimary: Theme.of(context).colorScheme.onPrimary,
+                  surface: Theme.of(context).colorScheme.surface,
+                  onSurface: Theme.of(context).colorScheme.onSurface,
+                ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (range != null) {
+      setState(() {
+        _dateFilter = DateFilter.custom;
+        _customDateRange = range;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,36 +81,151 @@ class _DebtsScreenState extends ConsumerState<DebtsScreen> {
       ),
       body: Column(
         children: [
-          // Search Bar
+          // Search & Filter Bar
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-            child: TextField(
-              onChanged: (val) => setState(() => _searchQuery = val.toLowerCase().trim()),
-              decoration: InputDecoration(
-                hintText: 'Search debtors...',
-                hintStyle: GoogleFonts.inter(color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
-                prefixIcon: Icon(Icons.search_rounded, color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: Icon(Icons.clear_rounded, size: 18, color: cs.onSurfaceVariant),
-                        onPressed: () {
-                          setState(() => _searchQuery = '');
-                          FocusScope.of(context).unfocus();
-                        },
-                      )
-                    : null,
-                filled: true,
-                fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.5),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide.none,
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    onChanged: (val) => setState(() => _searchQuery = val.toLowerCase().trim()),
+                    decoration: InputDecoration(
+                      hintText: 'Search debtors...',
+                      hintStyle: GoogleFonts.inter(color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
+                      prefixIcon: Icon(Icons.search_rounded, color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: Icon(Icons.clear_rounded, size: 18, color: cs.onSurfaceVariant),
+                              onPressed: () {
+                                setState(() => _searchQuery = '');
+                                FocusScope.of(context).unfocus();
+                              },
+                            )
+                          : null,
+                      filled: true,
+                      fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    ),
+                    style: GoogleFonts.inter(fontSize: 15),
+                  ),
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              ),
-              style: GoogleFonts.inter(fontSize: 15),
+                const SizedBox(width: 12),
+                
+                // Type Filter Button
+                PopupMenuButton<DebtorFilter>(
+                  initialValue: _filter,
+                  tooltip: 'Filter by Type',
+                  onSelected: (val) => setState(() => _filter = val),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(value: DebtorFilter.all, child: Text('All Types')),
+                    const PopupMenuItem(value: DebtorFilter.students, child: Text('Students Only')),
+                    const PopupMenuItem(value: DebtorFilter.external, child: Text('Others Only')),
+                  ],
+                  child: Container(
+                    height: 48,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.person_outline_rounded, size: 20, color: cs.onSurface),
+                        const SizedBox(width: 8),
+                        Text('Type', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(width: 8),
+
+                // Date Filter Button
+                PopupMenuButton<DateFilter>(
+                  initialValue: _dateFilter,
+                  tooltip: 'Filter by Date',
+                  onSelected: (val) {
+                    if (val == DateFilter.custom) {
+                      _selectCustomDateRange();
+                    } else {
+                      setState(() => _dateFilter = val);
+                    }
+                  },
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(value: DateFilter.allTime, child: Text('All Time')),
+                    const PopupMenuItem(value: DateFilter.today, child: Text('Today')),
+                    const PopupMenuItem(value: DateFilter.thisMonth, child: Text('This Month')),
+                    const PopupMenuItem(value: DateFilter.custom, child: Text('Custom Range...')),
+                  ],
+                  child: Container(
+                    height: 48,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: _dateFilter != DateFilter.allTime 
+                          ? cs.primary.withValues(alpha: 0.1) 
+                          : cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(12),
+                      border: _dateFilter != DateFilter.allTime
+                          ? Border.all(color: cs.primary.withValues(alpha: 0.5))
+                          : null,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.calendar_today_rounded, 
+                          size: 18, 
+                          color: _dateFilter != DateFilter.allTime ? cs.primary : cs.onSurface
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _dateFilter == DateFilter.today ? 'Today' :
+                          _dateFilter == DateFilter.thisMonth ? 'This Month' :
+                          _dateFilter == DateFilter.custom ? 'Custom' : 'Date', 
+                          style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w600,
+                            color: _dateFilter != DateFilter.allTime ? cs.primary : cs.onSurface,
+                          )
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(width: 8),
+                
+                // Sort Button
+                PopupMenuButton<DebtorSort>(
+                  initialValue: _sort,
+                  tooltip: 'Sort Debtors',
+                  onSelected: (val) => setState(() => _sort = val),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(value: DebtorSort.dateDesc, child: Text('Date: Newest to Oldest')),
+                    const PopupMenuItem(value: DebtorSort.dateAsc, child: Text('Date: Oldest to Newest')),
+                    const PopupMenuItem(value: DebtorSort.debtDesc, child: Text('Debt: High to Low')),
+                    const PopupMenuItem(value: DebtorSort.debtAsc, child: Text('Debt: Low to High')),
+                    const PopupMenuItem(value: DebtorSort.nameAsc, child: Text('Name: A to Z')),
+                    const PopupMenuItem(value: DebtorSort.nameDesc, child: Text('Name: Z to A')),
+                  ],
+                  child: Container(
+                    height: 48,
+                    width: 48,
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(Icons.sort_rounded, size: 20, color: cs.onSurface),
+                  ),
+                ),
+              ],
             ),
           ),
-
           const SizedBox(height: 16),
 
           // Content
@@ -99,7 +250,74 @@ class _DebtsScreenState extends ConsumerState<DebtsScreen> {
                           e.name.toLowerCase().contains(_searchQuery)).toList();
                     }
 
-                    // Calculate total debt
+                    // Apply type filter
+                    if (_filter == DebtorFilter.students) {
+                      externalDebtors = [];
+                    } else if (_filter == DebtorFilter.external) {
+                      studentDebtors = [];
+                    }
+
+                    // Apply date filter
+                    final now = DateTime.now();
+                    final todayStart = DateTime(now.year, now.month, now.day);
+                    final monthStart = DateTime(now.year, now.month, 1);
+
+                    bool matchesDate(DateTime date) {
+                      switch (_dateFilter) {
+                        case DateFilter.allTime:
+                          return true;
+                        case DateFilter.today:
+                          return date.isAfter(todayStart) || date.isAtSameMomentAs(todayStart);
+                        case DateFilter.thisMonth:
+                          return date.isAfter(monthStart) || date.isAtSameMomentAs(monthStart);
+                        case DateFilter.custom:
+                          if (_customDateRange == null) return true;
+                          // custom range includes end date fully
+                          final endDay = _customDateRange!.end.add(const Duration(days: 1));
+                          return (date.isAfter(_customDateRange!.start) || date.isAtSameMomentAs(_customDateRange!.start)) &&
+                                 date.isBefore(endDay);
+                      }
+                    }
+
+                    if (_dateFilter != DateFilter.allTime) {
+                      studentDebtors = studentDebtors.where((s) => matchesDate(s.updatedAt)).toList();
+                      externalDebtors = externalDebtors.where((e) => matchesDate(e.updatedAt)).toList();
+                    }
+
+                    // Apply sort
+                    int compareNames(String a, String b) => a.toLowerCase().compareTo(b.toLowerCase());
+                    int compareDebts(double a, double b) => a.compareTo(b);
+                    int compareDates(DateTime a, DateTime b) => a.compareTo(b);
+
+                    switch (_sort) {
+                      case DebtorSort.nameAsc:
+                        studentDebtors.sort((a, b) => compareNames(a.name, b.name));
+                        externalDebtors.sort((a, b) => compareNames(a.name, b.name));
+                        break;
+                      case DebtorSort.nameDesc:
+                        studentDebtors.sort((a, b) => compareNames(b.name, a.name));
+                        externalDebtors.sort((a, b) => compareNames(b.name, a.name));
+                        break;
+                      case DebtorSort.debtAsc:
+                        studentDebtors.sort((a, b) => compareDebts(a.debt, b.debt));
+                        externalDebtors.sort((a, b) => compareDebts(a.debt, b.debt));
+                        break;
+                      case DebtorSort.debtDesc:
+                        studentDebtors.sort((a, b) => compareDebts(b.debt, a.debt));
+                        externalDebtors.sort((a, b) => compareDebts(b.debt, a.debt));
+                        break;
+                      case DebtorSort.dateAsc:
+                        studentDebtors.sort((a, b) => compareDates(a.updatedAt, b.updatedAt));
+                        externalDebtors.sort((a, b) => compareDates(a.updatedAt, b.updatedAt));
+                        break;
+                      case DebtorSort.dateDesc:
+                        studentDebtors.sort((a, b) => compareDates(b.updatedAt, a.updatedAt));
+                        externalDebtors.sort((a, b) => compareDates(b.updatedAt, a.updatedAt));
+                        break;
+                    }
+
+                    // Calculate total debt (post search, pre filter to show context? No, usually based on visible)
+                    // Let's base it on the filtered items
                     final totalStudentDebt = studentDebtors.fold(0.0, (sum, s) => sum + s.debt);
                     final totalExternalDebt = externalDebtors.fold(0.0, (sum, e) => sum + e.debt);
                     final totalDebt = totalStudentDebt + totalExternalDebt;

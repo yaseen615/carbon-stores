@@ -146,7 +146,7 @@ class StudentRepository {
 
     // ── Strategy 1: array-contains on search_terms (word-prefix match) ──
     // Works for all students that have the search_terms field.
-    // Single Firestore query, uses automatic array index.
+    // Matches ANY word in the name (e.g. "yaseen" in "ahammed yaseen").
     try {
       final snap = await _collection
           .where('search_terms', arrayContains: lowerQ)
@@ -159,9 +159,11 @@ class StudentRepository {
       // search_terms field may not exist on older docs — continue
     }
 
-    // ── Strategy 2: Name prefix search (legacy students without search_terms) ──
+    // ── Strategy 2: Name prefix search (multiple case variants) ──
+    // Catches students without search_terms field (legacy or manually added).
     if (results.length < limit) {
       try {
+        // Try capitalized version (e.g. "Yaseen")
         final capitalQ = trimmed.substring(0, 1).toUpperCase() +
             (trimmed.length > 1 ? trimmed.substring(1).toLowerCase() : '');
 
@@ -172,6 +174,21 @@ class StudentRepository {
             .limit(limit - results.length)
             .get();
         for (final doc in snap1.docs) {
+          results.putIfAbsent(doc.id, () => Student.fromFirestore(doc));
+        }
+      } catch (_) {}
+    }
+
+    // Try lowercase version (e.g. "yaseen")
+    if (results.length < limit) {
+      try {
+        final snap2 = await _collection
+            .orderBy('name')
+            .startAt([lowerQ])
+            .endAt(['$lowerQ\uf8ff'])
+            .limit(limit - results.length)
+            .get();
+        for (final doc in snap2.docs) {
           results.putIfAbsent(doc.id, () => Student.fromFirestore(doc));
         }
       } catch (_) {}

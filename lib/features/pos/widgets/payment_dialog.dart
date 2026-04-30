@@ -9,6 +9,7 @@ import '../../../core/utils/receipt_id_generator.dart';
 import '../../../data/repositories/checkout_repository.dart';
 import '../../../providers/student_providers.dart';
 import '../../../providers/multi_cart_provider.dart';
+import '../../../providers/external_debtor_providers.dart';
 import 'receipt_dialog.dart';
 
 class PaymentDialog extends ConsumerStatefulWidget {
@@ -356,14 +357,36 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
                 ],
 
                 if (!hasStudent && debtAmount > 0) ...[
-                  TextField(
-                    controller: _debtorNameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Debtor Name',
-                      prefixIcon: Icon(Icons.person_outline),
-                      isDense: true,
-                    ),
-                    onChanged: (_) => setState(() => _error = null),
+                  Consumer(
+                    builder: (context, ref, child) {
+                      final debtorsAsync = ref.watch(externalDebtorsStreamProvider);
+                      final debtors = debtorsAsync.valueOrNull ?? [];
+                      
+                      return DropdownMenu<String>(
+                        controller: _debtorNameController,
+                        enableFilter: true,
+                        enableSearch: true,
+                        requestFocusOnTap: true,
+                        expandedInsets: EdgeInsets.zero,
+                        label: const Text('Debtor Name (Search or Type New)'),
+                        leadingIcon: const Icon(Icons.person_outline),
+                        inputDecorationTheme: const InputDecorationTheme(
+                          isDense: true,
+                        ),
+                        dropdownMenuEntries: debtors.map((d) {
+                          return DropdownMenuEntry<String>(
+                            value: d.name,
+                            label: d.name,
+                          );
+                        }).toList(),
+                        onSelected: (value) {
+                          if (value != null) {
+                            _debtorNameController.text = value;
+                          }
+                          setState(() => _error = null);
+                        },
+                      );
+                    },
                   ),
                   const SizedBox(height: 16),
                 ],

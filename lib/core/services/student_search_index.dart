@@ -83,7 +83,8 @@ class StudentSearchIndex {
   /// Search the index. Returns matching entries (max [limit]).
   ///
   /// Matches case-insensitively against both name and studentId.
-  /// Supports substring matching (not just prefix).
+  /// Uses `contains` for full substring matching across the entire name,
+  /// so searching "yaseen" matches both "yaseen" and "ahammed yaseen".
   List<StudentIndexEntry> search(String query, {int limit = 12}) {
     if (_entries == null || query.trim().isEmpty) return [];
 
@@ -94,15 +95,20 @@ class StudentSearchIndex {
       final nameLower = entry.name.toLowerCase();
       final idLower = entry.studentId.toLowerCase();
 
-      // Match if the query matches the start of ANY word in the name,
-      // or if it matches anywhere in the student ID.
-      if (nameLower.startsWith(q) || 
-          nameLower.contains(' $q') ||
-          idLower.contains(q)) {
+      // Match if query appears ANYWHERE in the name or ID
+      if (nameLower.contains(q) || idLower.contains(q)) {
         results.add(entry);
         if (results.length >= limit) break;
       }
     }
+
+    // Sort: exact starts first, then contains
+    results.sort((a, b) {
+      final aStarts = a.name.toLowerCase().startsWith(q) ? 0 : 1;
+      final bStarts = b.name.toLowerCase().startsWith(q) ? 0 : 1;
+      if (aStarts != bStarts) return aStarts.compareTo(bStarts);
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
 
     return results;
   }
