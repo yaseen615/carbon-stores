@@ -15,12 +15,15 @@ class VoidRepository {
   /// 2. Reverses stock changes (adds stock back)
   /// 3. Marks transaction as voided
   Future<void> voidTransaction(StoreTransaction transaction, String reason) async {
-    if (transaction.isVoided) {
-      throw Exception('Transaction is already voided');
-    }
-
     await _firestore.runTransaction((tx) async {
+      // H4 FIX: Re-read transaction inside Firestore transaction to prevent double-void
       final txnRef = _firestore.collection(AppConstants.transactionsCollection).doc(transaction.id);
+      final freshTxnDoc = await tx.get(txnRef);
+      if (!freshTxnDoc.exists) throw Exception('Transaction not found');
+      final freshData = freshTxnDoc.data() as Map<String, dynamic>;
+      if (freshData['is_voided'] == true) {
+        throw Exception('Transaction is already voided');
+      }
       
       // 1. PERFORM ALL READS FIRST
       DocumentSnapshot? studentDoc;

@@ -214,14 +214,17 @@ class StudentRepository {
   //  WRITE OPERATIONS (unchanged — existing logic preserved)
   // ──────────────────────────────────────────────────────────
 
-  /// Add a new student (using admission number as doc ID)
+  /// Add a new student (using admission number as doc ID).
+  /// Uses a transaction to prevent race conditions with concurrent additions.
   Future<void> addStudent(Student student) async {
-    final docRef = _collection.doc(student.id);
-    final doc = await docRef.get();
-    if (doc.exists) {
-      throw Exception('A student with this admission number already exists');
-    }
-    await docRef.set(student.toFirestore());
+    await _firestore.runTransaction((tx) async {
+      final docRef = _collection.doc(student.id);
+      final doc = await tx.get(docRef);
+      if (doc.exists) {
+        throw Exception('A student with this admission number already exists');
+      }
+      tx.set(docRef, student.toFirestore());
+    });
   }
 
   /// Update a student

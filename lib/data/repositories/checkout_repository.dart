@@ -27,6 +27,21 @@ class CheckoutRepository {
     double? mixedDebtAmount,
     String? debtorName, // For external debtors
   }) async {
+    // ── Validate inputs ──
+    if (cartItems.isEmpty) throw Exception('Cart is empty');
+    if (cartTotal <= 0) throw Exception('Invalid cart total');
+
+    // Validate mixed mode doesn't overpay
+    if (paymentMode == AppConstants.paymentMixed) {
+      final sum = (mixedWalletAmount ?? 0) +
+          (mixedCashAmount ?? 0) +
+          (mixedUpiAmount ?? 0) +
+          (mixedDebtAmount ?? 0);
+      if (sum > cartTotal + 0.01) {
+        // 0.01 tolerance for floating-point
+        throw Exception('Total payments exceed order amount');
+      }
+    }
     late StoreTransaction savedTransaction;
 
     // Resolve external debtor reference before transaction if needed
@@ -212,6 +227,14 @@ class CheckoutRepository {
           final data = doc.data() as Map<String, dynamic>;
           final currentStock = data['stock'] as int;
           final currentSales = (data['sales'] ?? 0) as int;
+
+          // ── C3 FIX: Validate stock before deduction ──
+          if (currentStock < item.quantity) {
+            throw Exception(
+              'Insufficient stock for ${data['name'] ?? item.name}: '
+              'available $currentStock, requested ${item.quantity}',
+            );
+          }
 
           tx.update(ref, {
             'stock': currentStock - item.quantity,

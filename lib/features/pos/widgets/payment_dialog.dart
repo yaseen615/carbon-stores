@@ -84,6 +84,9 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
       }
 
       final sum = walletDeduction + cashAmount + upiAmount + debtAmount;
+      if (localError == null && sum > cartTotal + 0.01) {
+        localError = 'Total payments (${CurrencyFormatter.format(sum)}) exceed order amount';
+      }
       if (sum < cartTotal) {
         debtAmount += (cartTotal - sum);
       }

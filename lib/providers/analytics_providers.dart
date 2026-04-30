@@ -46,22 +46,9 @@ final analyticsResolvedDateRangeProvider = Provider<DateTimeRange?>((ref) {
 
 // ─── Total Outstanding Debt Helper ───
 final totalOverallDebtProvider = Provider<double>((ref) {
-  final studentsAsync = ref.watch(studentsStreamProvider);
-  final externalsAsync = ref.watch(externalDebtorsStreamProvider);
-  
-  double total = 0;
-  
-  studentsAsync.whenData((students) {
-    for (final s in students) {
-      total += s.debt;
-    }
-  });
-
-  externalsAsync.whenData((externals) {
-    for (final e in externals) {
-      total += e.debt;
-    }
-  });
-  
-  return total;
+  final studentDebt = ref.watch(studentsStreamProvider).valueOrNull
+      ?.fold<double>(0, (sum, s) => sum + s.debt) ?? 0;
+  final externalDebt = ref.watch(externalDebtorsStreamProvider).valueOrNull
+      ?.fold<double>(0, (sum, e) => sum + e.debt) ?? 0;
+  return studentDebt + externalDebt;
 });

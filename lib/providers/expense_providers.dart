@@ -10,13 +10,15 @@ final filteredExpensesProvider = StreamProvider<List<Expense>>((ref) {
   final repo = ref.watch(expenseRepositoryProvider);
   final dateRange = ref.watch(analyticsResolvedDateRangeProvider);
   final section = ref.watch(storeSectionProvider);
-  
+
   final stream = dateRange == null
       ? repo.getExpenses()
       : repo.getExpensesByDateRange(dateRange.start, dateRange.end);
-  
+
   if (section == StoreSection.all) return stream;
-  return stream.map((list) => list.where((e) => e.section == section.firestoreValue).toList());
+  return stream.map(
+    (list) => list.where((e) => e.section == section.firestoreValue).toList(),
+  );
 });
 
 // ─── Repository Provider ───
@@ -24,13 +26,24 @@ final expenseRepositoryProvider = Provider<ExpenseRepository>((ref) {
   return ExpenseRepository();
 });
 
-// ─── All Expenses Stream ───
+// ─── Expenses Stream (limited to last 90 days for performance) ───
+// Previously fetched ALL expenses ever. Now defaults to 90 days to reduce reads.
 final expensesStreamProvider = StreamProvider<List<Expense>>((ref) {
   final repo = ref.watch(expenseRepositoryProvider);
   final section = ref.watch(storeSectionProvider);
-  final stream = repo.getExpenses();
+
+  // Limit to last 90 days by default instead of all time
+  final now = DateTime.now();
+  final start = DateTime(now.year, now.month - 3, now.day);
+  final stream = repo.getExpensesByDateRange(
+    start,
+    now.add(const Duration(days: 1)),
+  );
+
   if (section == StoreSection.all) return stream;
-  return stream.map((list) => list.where((e) => e.section == section.firestoreValue).toList());
+  return stream.map(
+    (list) => list.where((e) => e.section == section.firestoreValue).toList(),
+  );
 });
 
 // ─── Filtered Total Expenses ───
@@ -43,7 +56,7 @@ final totalFilteredExpensesProvider = Provider<double>((ref) {
   );
 });
 
-// ─── Total Expenses (All Time) ───
+// ─── Total Expenses (from filtered stream — not all time) ───
 final totalExpensesProvider = Provider<double>((ref) {
   final expensesAsync = ref.watch(expensesStreamProvider);
   return expensesAsync.when(

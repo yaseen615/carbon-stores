@@ -5,7 +5,7 @@ import '../data/models/external_debtor_model.dart';
 
 final externalDebtorsSearchQueryProvider = StateProvider<String>((ref) => '');
 
-final externalDebtorsStreamProvider = StreamProvider.autoDispose<List<ExternalDebtor>>((ref) {
+final externalDebtorsStreamProvider = StreamProvider<List<ExternalDebtor>>((ref) {
   final query = ref.watch(externalDebtorsSearchQueryProvider).toLowerCase().trim();
   
   Query firestoreQuery = FirebaseFirestore.instance

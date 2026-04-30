@@ -11,6 +11,10 @@ import '../../core/utils/web_downloader/web_downloader.dart';
 class LocalStorageService {
   static const String _imagesDirName = 'product_images';
 
+  /// In-memory image cache to avoid repeated disk/SharedPreferences reads.
+  /// Key: imageId, Value: image bytes (or null for known-missing images).
+  static final Map<String, Uint8List?> _imageCache = {};
+
   /// Save an image directly to local storage (or SharedPreferences if Web)
   Future<void> saveProductImage(String imageId, XFile image, {bool isWeb = kIsWeb}) async {
     if (isWeb) {
@@ -18,6 +22,8 @@ class LocalStorageService {
       final base64String = base64Encode(bytes);
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('img_$imageId', base64String);
+      // Invalidate cache
+      _imageCache[imageId] = bytes;
       return;
     }
 
@@ -30,10 +36,17 @@ class LocalStorageService {
     final bytes = await image.readAsBytes();
     final file = File('${imagesDir.path}/$imageId');
     await file.writeAsBytes(bytes);
+    // Invalidate cache
+    _imageCache[imageId] = bytes;
   }
 
   /// Get image bytes (Base64 on Web, File on Native)
   Future<Uint8List?> getProductImageBytes(String imageId, {bool isWeb = kIsWeb}) async {
+    // Check memory cache first
+    if (_imageCache.containsKey(imageId)) {
+      return _imageCache[imageId];
+    }
+
     // Normalise imageId: if it starts with img_, strip it for native lookups
     final cleanId = imageId.startsWith('img_') ? imageId.substring(4) : imageId;
 
@@ -41,8 +54,11 @@ class LocalStorageService {
       final prefs = await SharedPreferences.getInstance();
       final base64String = prefs.getString('img_$cleanId') ?? prefs.getString(cleanId);
       if (base64String != null) {
-        return base64Decode(base64String);
+        final bytes = base64Decode(base64String);
+        _imageCache[imageId] = bytes;
+        return bytes;
       }
+      _imageCache[imageId] = null;
       return null;
     }
 
@@ -60,7 +76,7 @@ class LocalStorageService {
       debugPrint('[ImageLoad] Attempting to read: ${file.path}');
       if (await file.exists()) {
         final bytes = await file.readAsBytes();
-        debugPrint('[ImageLoad] Success: read ${bytes.length} bytes for $imageId');
+        _imageCache[imageId] = bytes;
         return bytes;
       } else {
         debugPrint('[ImageLoad] File does NOT exist: ${file.path}');
@@ -68,11 +84,15 @@ class LocalStorageService {
     } catch (e) {
       debugPrint('[ImageLoad] Error reading image: $e');
     }
+    _imageCache[imageId] = null;
     return null;
   }
   
   /// Delete image
   Future<void> deleteProductImage(String imageId, {bool isWeb = kIsWeb}) async {
+    // Invalidate cache
+    _imageCache.remove(imageId);
+
     if (isWeb) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('img_$imageId');
