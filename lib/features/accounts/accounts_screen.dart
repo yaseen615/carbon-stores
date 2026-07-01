@@ -10,6 +10,7 @@ import '../../../core/utils/exporter/csv_exporter_stub.dart'
     if (dart.library.html) '../../../core/utils/exporter/csv_exporter_web.dart'
     if (dart.library.io) '../../../core/utils/exporter/csv_exporter_mobile.dart';
 import 'package:intl/intl.dart';
+import '../../../core/utils/responsive_helper.dart';
 
 class AccountsScreen extends ConsumerWidget {
   const AccountsScreen({super.key});
@@ -36,171 +37,183 @@ class AccountsScreen extends ConsumerWidget {
           const SizedBox(width: 16),
         ],
       ),
-      body: Column(
-        children: [
-          // Filter Row
-          Padding(
-            padding: const EdgeInsets.all(24),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: AccountsDateFilter.values.map((f) {
-                  final isSelected = filter == f;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(_getFilterLabel(f, ref)),
-                      selected: isSelected,
-                      onSelected: (val) async {
-                        if (!val) return;
-                        
-                        if (f == AccountsDateFilter.custom) {
-                          final range = await showDateRangePicker(
-                            context: context,
-                            firstDate: DateTime(2023),
-                            lastDate: DateTime.now().add(const Duration(days: 30)),
-                            initialDateRange: ref.read(accountsCustomDateRangeProvider),
+      body: Scrollbar(
+        thumbVisibility: Responsive.isTabletOrDesktop(context),
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: Column(
+                children: [
+                  // Filter Row
+                  Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: AccountsDateFilter.values.map((f) {
+                          final isSelected = filter == f;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              label: Text(_getFilterLabel(f, ref)),
+                              selected: isSelected,
+                              onSelected: (val) async {
+                                if (!val) return;
+                                
+                                if (f == AccountsDateFilter.custom) {
+                                  final range = await showDateRangePicker(
+                                    context: context,
+                                    firstDate: DateTime(2023),
+                                    lastDate: DateTime.now().add(const Duration(days: 30)),
+                                    initialDateRange: ref.read(accountsCustomDateRangeProvider),
+                                  );
+                                  if (range != null) {
+                                    ref.read(accountsCustomDateRangeProvider.notifier).state = range;
+                                    ref.read(accountsDateFilterProvider.notifier).state = f;
+                                  }
+                                } else {
+                                  ref.read(accountsDateFilterProvider.notifier).state = f;
+                                }
+                              },
+                              selectedColor: cs.primary.withValues(alpha: 0.1),
+                              labelStyle: GoogleFonts.inter(
+                                color: isSelected ? cs.primary : cs.onSurfaceVariant,
+                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: BorderSide(
+                                  color: isSelected ? cs.primary : cs.outline.withValues(alpha: 0.2),
+                                ),
+                              ),
+                            ),
                           );
-                          if (range != null) {
-                            ref.read(accountsCustomDateRangeProvider.notifier).state = range;
-                            ref.read(accountsDateFilterProvider.notifier).state = f;
-                          }
-                        } else {
-                          ref.read(accountsDateFilterProvider.notifier).state = f;
-                        }
-                      },
-                      selectedColor: cs.primary.withValues(alpha: 0.1),
-                      labelStyle: GoogleFonts.inter(
-                        color: isSelected ? cs.primary : cs.onSurfaceVariant,
-                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                        }).toList(),
                       ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(
-                          color: isSelected ? cs.primary : cs.outline.withValues(alpha: 0.2),
+                    ),
+                  ),
+        
+                  // Summary Cards
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: AppCard(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Total Actual Receipts',
+                                  style: GoogleFonts.inter(fontSize: 16, color: cs.onSurfaceVariant),
+                                ),
+                                Text(
+                                  CurrencyFormatter.format(summary.totalReceived),
+                                  style: GoogleFonts.inter(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w700,
+                                    color: pos.success,
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                            const Divider(),
+                            const SizedBox(height: 20),
+                            Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(child: _SummaryBox(label: 'Cash', amount: summary.totalCash, color: cs.onSurface)),
+                                    const SizedBox(width: 16),
+                                    Expanded(child: _SummaryBox(label: 'UPI', amount: summary.totalUpi, color: cs.primary)),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                Row(
+                                  children: [
+                                    Expanded(child: _SummaryBox(label: 'Wallet Usage', amount: summary.totalWallet, color: pos.info)),
+                                    const SizedBox(width: 16),
+                                    Expanded(child: _SummaryBox(label: 'New Debt', amount: summary.totalDebt, color: pos.error)),
+                                  ],
+                                ),
+                              ],
+                            )
+                          ],
                         ),
                       ),
                     ),
-                  );
-                }).toList(),
+                  ),
+                  const SizedBox(height: 24),
+                ],
               ),
             ),
-          ),
-
-          // Summary Cards
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: AppCard(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Total Actual Receipts',
-                          style: GoogleFonts.inter(fontSize: 16, color: cs.onSurfaceVariant),
-                        ),
-                        Text(
-                          CurrencyFormatter.format(summary.totalReceived),
-                          style: GoogleFonts.inter(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            color: pos.success,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    const Divider(),
-                    const SizedBox(height: 20),
-                    Column(
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(child: _SummaryBox(label: 'Cash', amount: summary.totalCash, color: cs.onSurface)),
-                            const SizedBox(width: 16),
-                            Expanded(child: _SummaryBox(label: 'UPI', amount: summary.totalUpi, color: cs.primary)),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(child: _SummaryBox(label: 'Wallet Usage', amount: summary.totalWallet, color: pos.info)),
-                            const SizedBox(width: 16),
-                            Expanded(child: _SummaryBox(label: 'New Debt', amount: summary.totalDebt, color: pos.error)),
-                          ],
-                        ),
-                      ],
-                    )
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Transaction List
-          Expanded(
-            child: txnsAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Error: $e')),
+  
+            // Transaction List
+            txnsAsync.when(
+              loading: () => const SliverFillRemaining(child: Center(child: CircularProgressIndicator())),
+              error: (e, _) => SliverFillRemaining(child: Center(child: Text('Error: $e'))),
               data: (txns) {
                 final displayItems = txns.where((t) => !t.isVoided).toList();
                 if (displayItems.isEmpty) {
-                  return Center(
-                    child: Text('No transactions found for this period.',
-                      style: GoogleFonts.inter(color: cs.onSurfaceVariant)),
+                  return SliverFillRemaining(
+                    child: Center(
+                      child: Text('No transactions found for this period.',
+                        style: GoogleFonts.inter(color: cs.onSurfaceVariant)),
+                    ),
                   );
                 }
-
-                return ListView.builder(
+  
+                return SliverPadding(
                   padding: const EdgeInsets.fromLTRB(24, 0, 24, 120),
-                  itemCount: displayItems.length,
-                  itemBuilder: (ctx, idx) {
-                    final t = displayItems[idx];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(color: cs.outline.withValues(alpha: 0.1)),
-                        ),
-                        tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.3),
-                        title: Text(t.receiptId, style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-                        subtitle: Text(
-                          DateFormatter.formatDateTime(t.createdAt),
-                          style: GoogleFonts.inter(fontSize: 12),
-                        ),
-                        trailing: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              CurrencyFormatter.format(t.totalAmount),
-                              style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (ctx, idx) {
+                        final t = displayItems[idx];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: ListTile(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(color: cs.outline.withValues(alpha: 0.1)),
                             ),
-                            Text(
-                              t.paymentMode.toUpperCase(),
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                color: cs.primary,
-                                fontWeight: FontWeight.w600,
-                              ),
+                            tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.3),
+                            title: Text(t.receiptId, style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+                            subtitle: Text(
+                              DateFormatter.formatDateTime(t.createdAt),
+                              style: GoogleFonts.inter(fontSize: 12),
                             ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
+                            trailing: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  CurrencyFormatter.format(t.totalAmount),
+                                  style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+                                ),
+                                Text(
+                                  t.paymentMode.toUpperCase(),
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    color: cs.primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                      childCount: displayItems.length,
+                    ),
+                  ),
                 );
               },
             ),
-          )
-        ],
+          ],
+        ),
       ),
     );
   }

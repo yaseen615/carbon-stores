@@ -8,6 +8,7 @@ class SearchField extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final VoidCallback? onClear;
   final TextEditingController? controller;
+  final FocusNode? focusNode;
   final bool autofocus;
 
   const SearchField({
@@ -16,6 +17,7 @@ class SearchField extends StatelessWidget {
     required this.onChanged,
     this.onClear,
     this.controller,
+    this.focusNode,
     this.autofocus = false,
   });
 
@@ -26,6 +28,7 @@ class SearchField extends StatelessWidget {
 
     return TextField(
       controller: controller,
+      focusNode: focusNode,
       autofocus: autofocus,
       onChanged: onChanged,
       style: GoogleFonts.inter(color: cs.onSurface, fontSize: 15),

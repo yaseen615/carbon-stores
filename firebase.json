@@ -1,1 +1,29 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"carbon-stores","appId":"1:618585657398:android:2a0479c9b6274583bc4897","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"carbon-stores","configurations":{"android":"1:618585657398:android:2a0479c9b6274583bc4897","ios":"1:618585657398:ios:ec2852ab7579817fbc4897","macos":"1:618585657398:ios:ec2852ab7579817fbc4897","web":"1:618585657398:web:f23f1c521fa0a3c7bc4897","windows":"1:618585657398:web:682090571ab957a1bc4897"}}}}}}
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "carbon-stores",
+          "appId": "1:618585657398:android:2a0479c9b6274583bc4897",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "carbon-stores",
+          "configurations": {
+            "android": "1:618585657398:android:2a0479c9b6274583bc4897",
+            "ios": "1:618585657398:ios:ec2852ab7579817fbc4897",
+            "macos": "1:618585657398:ios:ec2852ab7579817fbc4897",
+            "web": "1:618585657398:web:f23f1c521fa0a3c7bc4897",
+            "windows": "1:618585657398:web:682090571ab957a1bc4897"
+          }
+        }
+      }
+    }
+  }
+}

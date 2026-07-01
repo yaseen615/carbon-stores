@@ -39,9 +39,11 @@ class AnalyticsScreen extends ConsumerWidget {
 
     final topPadding = isPhone ? MediaQuery.paddingOf(context).top + 16 : 20.0;
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-          isDesktop ? 24 : 16, topPadding, isDesktop ? 24 : 16, isPhone ? 80 : 24),
+    return Scrollbar(
+      thumbVisibility: isDesktop,
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+            isDesktop ? 24 : 16, topPadding, isDesktop ? 24 : 16, isPhone ? 80 : 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -343,6 +345,7 @@ class AnalyticsScreen extends ConsumerWidget {
           ),
         ],
       ),
+    ),
     );
   }
 

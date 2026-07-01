@@ -167,18 +167,13 @@ class CartItemRow extends ConsumerWidget {
                               .decrementQuantity(item.productId);
                         },
                       ),
-                      // Quantity
-                      Container(
-                        width: 36,
-                        alignment: Alignment.center,
-                        child: Text(
-                          '${item.quantity}',
-                          style: GoogleFonts.inter(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: cs.onSurface,
-                          ),
-                        ),
+                      // Quantity — tappable to edit via keyboard
+                      _EditableQuantity(
+                        quantity: item.quantity,
+                        onChanged: (newQty) {
+                          ref.read(multiCartProvider.notifier)
+                              .updateQuantity(item.productId, newQty);
+                        },
                       ),
                       // Plus button
                       _StepperButton(
@@ -285,6 +280,144 @@ class _StepperButtonState extends State<_StepperButton>
           height: 40,
           child: Center(
             child: Icon(widget.icon, size: 20, color: widget.iconColor),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Tappable quantity display that becomes an editable TextField on tap.
+/// Allows keyboard users to type a quantity directly instead of +/- buttons.
+class _EditableQuantity extends StatefulWidget {
+  final int quantity;
+  final ValueChanged<int> onChanged;
+
+  const _EditableQuantity({
+    required this.quantity,
+    required this.onChanged,
+  });
+
+  @override
+  State<_EditableQuantity> createState() => _EditableQuantityState();
+}
+
+class _EditableQuantityState extends State<_EditableQuantity> {
+  bool _isEditing = false;
+  late TextEditingController _controller;
+  late FocusNode _focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: '${widget.quantity}');
+    _focusNode = FocusNode();
+    _focusNode.addListener(_onFocusChange);
+  }
+
+  @override
+  void didUpdateWidget(_EditableQuantity oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.quantity != widget.quantity && !_isEditing) {
+      _controller.text = '${widget.quantity}';
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_onFocusChange);
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    if (!_focusNode.hasFocus && _isEditing) {
+      _commitEdit();
+    }
+  }
+
+  void _startEditing() {
+    setState(() {
+      _isEditing = true;
+      _controller.text = '${widget.quantity}';
+    });
+    // Wait for build, then focus & select all
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusNode.requestFocus();
+      _controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _controller.text.length,
+      );
+    });
+  }
+
+  void _commitEdit() {
+    final newQty = int.tryParse(_controller.text.trim());
+    if (newQty != null && newQty > 0) {
+      widget.onChanged(newQty);
+    } else if (newQty != null && newQty <= 0) {
+      // Treat 0 or negative as remove
+      widget.onChanged(0);
+    }
+    // else invalid input → revert
+    setState(() => _isEditing = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    if (_isEditing) {
+      return SizedBox(
+        width: 44,
+        height: 36,
+        child: TextField(
+          controller: _controller,
+          focusNode: _focusNode,
+          keyboardType: TextInputType.number,
+          textAlign: TextAlign.center,
+          style: GoogleFonts.inter(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: cs.primary,
+          ),
+          decoration: InputDecoration(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 4,
+              vertical: 8,
+            ),
+            filled: true,
+            fillColor: cs.primary.withValues(alpha: 0.08),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: cs.primary, width: 1.5),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: cs.primary, width: 2),
+            ),
+            isDense: true,
+          ),
+          onSubmitted: (_) => _commitEdit(),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: _startEditing,
+      child: Container(
+        width: 36,
+        alignment: Alignment.center,
+        child: Tooltip(
+          message: 'Click to edit quantity',
+          child: Text(
+            '${widget.quantity}',
+            style: GoogleFonts.inter(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: cs.onSurface,
+            ),
           ),
         ),
       ),

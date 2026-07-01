@@ -5,18 +5,42 @@ import '../../core/utils/responsive_helper.dart';
 import '../../core/widgets/search_field.dart';
 import '../../core/constants/store_section.dart';
 import '../../core/theme/pos_colors.dart';
+import '../../core/services/keyboard_shortcuts_service.dart';
 import '../../providers/product_providers.dart';
 import '../../providers/multi_cart_provider.dart';
 import '../../providers/student_providers.dart';
 import 'widgets/product_grid.dart';
 import 'widgets/cart_panel.dart';
 import 'widgets/category_tabs.dart';
+import 'widgets/custom_bill_dialog.dart';
 
-class PosScreen extends ConsumerWidget {
+class PosScreen extends ConsumerStatefulWidget {
   const PosScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PosScreen> createState() => _PosScreenState();
+}
+
+class _PosScreenState extends ConsumerState<PosScreen> {
+  late final FocusNode _searchFocusNode;
+  late final TextEditingController _searchController;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchFocusNode = FocusNode(debugLabel: 'PosSearch');
+    _searchController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _searchFocusNode.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isPhone = Responsive.isPhone(context);
     final topPadding = isPhone ? MediaQuery.paddingOf(context).top + 16 : 20.0;
@@ -26,6 +50,8 @@ class PosScreen extends ConsumerWidget {
         Expanded(
           child: SearchField(
             hintText: 'Search Products',
+            controller: _searchController,
+            focusNode: _searchFocusNode,
             onChanged: (val) {
               ref.read(productSearchQueryProvider.notifier).state = val;
             },
@@ -96,6 +122,47 @@ class PosScreen extends ConsumerWidget {
             ),
           );
         }),
+        const SizedBox(width: 12),
+        // ─── Keyboard Shortcuts Help ───
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: cs.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+                color: cs.onSurfaceVariant.withValues(alpha: 0.1)),
+          ),
+          child: IconButton(
+            icon: const Icon(Icons.keyboard_rounded, size: 22),
+            color: cs.onSurfaceVariant,
+            tooltip: 'Keyboard Shortcuts',
+            onPressed: () => _showShortcutsHelp(context),
+          ),
+        ),
+        const SizedBox(width: 12),
+        // ─── Custom Bill / Item ───
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: cs.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+                color: cs.primary.withValues(alpha: 0.3)),
+          ),
+          child: IconButton(
+            icon: const Icon(Icons.post_add_rounded, size: 22),
+            color: cs.primary,
+            tooltip: 'Add Custom Bill',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => const CustomBillDialog(),
+              );
+            },
+          ),
+        ),
       ],
     );
 
@@ -146,38 +213,179 @@ class PosScreen extends ConsumerWidget {
     // For 10" tablet (~800px minus sidebar ~150px = ~650px usable),
     // give cart 45% flex for generous space
 
-    return Row(
-      children: [
-        // ─── Left: Product browsing + Customer Tabs ───
-        Expanded(
-          flex: isTablet ? 55 : 65,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 8, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ─── Customer Session Tabs (moved here from cart) ───
-                _CustomerSessionBar(),
+    return PosKeyboardShortcuts(
+      searchFocusNode: _searchFocusNode,
+      searchController: _searchController,
+      child: Row(
+        children: [
+          // ─── Left: Product browsing + Customer Tabs ───
+          Expanded(
+            flex: isTablet ? 55 : 65,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 8, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ─── Customer Session Tabs (moved here from cart) ───
+                  _CustomerSessionBar(),
 
-                const SizedBox(height: 12),
+                  const SizedBox(height: 12),
 
-                searchRow,
-                const SizedBox(height: 12),
-                const _PosSectionFilterRow(),
-                const SizedBox(height: 12),
-                const CategoryTabs(),
-                const SizedBox(height: 12),
-                const Expanded(child: ProductGrid()),
-              ],
+                  searchRow,
+                  const SizedBox(height: 12),
+                  const _PosSectionFilterRow(),
+                  const SizedBox(height: 12),
+                  const CategoryTabs(),
+                  const SizedBox(height: 12),
+                  const Expanded(child: ProductGrid()),
+                ],
+              ),
             ),
           ),
-        ),
-        // ─── Right: Cart Panel ───
-        Expanded(
-          flex: isTablet ? 45 : 35,
-          child: const CartPanel(),
-        ),
-      ],
+          // ─── Right: Cart Panel ───
+          Expanded(
+            flex: isTablet ? 45 : 35,
+            child: const CartPanel(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showShortcutsHelp(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final cs = Theme.of(context).colorScheme;
+        final pos = context.pos;
+
+        Widget buildShortcutRow(String keys, String description) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  description,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: pos.fillSecondary,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: cs.onSurfaceVariant.withValues(alpha: 0.1),
+                    ),
+                  ),
+                  child: Text(
+                    keys,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: cs.surface,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.keyboard_rounded, color: cs.primary),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Keyboard Shortcuts',
+                            style: GoogleFonts.inter(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: cs.onSurface,
+                            ),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => Navigator.pop(context),
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Divider(color: cs.onSurfaceVariant.withValues(alpha: 0.1)),
+                  const SizedBox(height: 8),
+                  
+                  Text('Global', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: pos.labelTertiary)),
+                  const SizedBox(height: 4),
+                  buildShortcutRow('/ or Ctrl+K', 'Search products'),
+                  buildShortcutRow('Esc', 'Clear search / Unfocus'),
+                  buildShortcutRow('F5', 'Refresh data'),
+                  buildShortcutRow('Ctrl+L', 'Toggle list/grid view'),
+                  
+                  const SizedBox(height: 12),
+                  Text('Cart & Sessions', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: pos.labelTertiary)),
+                  const SizedBox(height: 4),
+                  buildShortcutRow('Ctrl+N', 'New customer tab'),
+                  buildShortcutRow('Ctrl+W', 'Close current tab'),
+                  buildShortcutRow('Ctrl+Tab', 'Next tab'),
+                  buildShortcutRow('Ctrl+Shift+Tab', 'Previous tab'),
+                  buildShortcutRow('Ctrl+Backspace', 'Clear entire cart'),
+                  
+                  const SizedBox(height: 12),
+                  Text('Checkout', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: pos.labelTertiary)),
+                  const SizedBox(height: 4),
+                  buildShortcutRow('F2', 'Open checkout'),
+                  buildShortcutRow('1 - 5', 'Select payment mode'),
+                  buildShortcutRow('Enter', 'Confirm payment'),
+                  
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: cs.primaryContainer.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.lightbulb_outline_rounded, size: 16, color: cs.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Click on the item quantity in the cart to type a specific amount.',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: cs.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

@@ -65,25 +65,7 @@ class AppShell extends ConsumerWidget {
       );
     }
 
-    // ─── Desktop Layout: Sidebar ───
-    if (device == DeviceType.desktop) {
-      return Scaffold(
-        body: Row(
-          children: [
-            _SideNav(
-              currentPage: currentPage,
-              isMobile: false,
-              onPageSelected: (page) {
-                ref.read(currentPageProvider.notifier).state = page;
-              },
-            ),
-            Expanded(child: content),
-          ],
-        ),
-      );
-    }
-
-    // ─── Tablet Layout: Drawer (unchanged) ───
+    // ─── Desktop & Tablet Layout: Drawer ───
     return Scaffold(
       appBar: AppBar(
         title: Text(

@@ -1,0 +1,64 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper: Is the request from an authenticated user? ───
+    // Anonymous auth counts — this blocks raw API/REST attacks
+    // while keeping the admin experience frictionless.
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // ─── Products ───
+    // Admin needs full CRUD for inventory management, stock updates,
+    // and POS catalog display.
+    match /products/{productId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // ─── Students (Customers) ───
+    // Admin manages customer records: wallet recharges, debt tracking,
+    // balance adjustments, and search.
+    match /students/{studentId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // ─── Transactions ───
+    // Financial records — create and read freely, but updates are
+    // restricted to voiding only. Deletes are forbidden to preserve
+    // the financial audit trail.
+    match /transactions/{transactionId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated()
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                       .hasOnly(['is_voided', 'voided_at', 'void_reason']);
+      allow delete: if false;
+    }
+
+    // ─── Expenses ───
+    // Admin needs full CRUD for recording business expenses.
+    match /expenses/{expenseId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // ─── Audit Logs ───
+    // Append-only: logs can be read and created but never modified
+    // or deleted. This preserves the integrity of the audit trail.
+    match /audit_logs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    // ─── External Debtors ───
+    // Admin manages non-student customers with outstanding debt.
+    match /external_debtors/{debtorId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // ─── Default: deny everything else ───
+    // Any collection not explicitly listed above is fully locked down.
+    // This prevents accidental exposure of future collections.
+  }
+}

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/pos_colors.dart';
@@ -29,6 +30,13 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
   final TextEditingController _mixedUpiController = TextEditingController();
   final TextEditingController _mixedDebtController = TextEditingController();
   final TextEditingController _debtorNameController = TextEditingController();
+  late final FocusNode _dialogFocusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _dialogFocusNode = FocusNode(debugLabel: 'PaymentDialogRoot');
+  }
 
   @override
   void dispose() {
@@ -37,6 +45,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
     _mixedUpiController.dispose();
     _mixedDebtController.dispose();
     _debtorNameController.dispose();
+    _dialogFocusNode.dispose();
     super.dispose();
   }
 
@@ -95,7 +104,11 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
 
     final displayError = _error ?? localError;
 
-    return Dialog(
+    return Focus(
+      focusNode: _dialogFocusNode,
+      autofocus: true,
+      onKeyEvent: _handleDialogKeyEvent,
+      child: Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       elevation: 0,
       backgroundColor: cs.surface,
@@ -232,6 +245,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
                       child: _PaymentModeChip(
                         label: 'Cash',
                         icon: Icons.money_rounded,
+                        shortcutKey: '1',
                         isSelected: _paymentMode == AppConstants.paymentCash,
                         onTap: () =>
                             setState(() => _paymentMode = AppConstants.paymentCash),
@@ -242,6 +256,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
                       child: _PaymentModeChip(
                         label: 'UPI',
                         icon: Icons.qr_code_2_rounded,
+                        shortcutKey: '2',
                         isSelected: _paymentMode == AppConstants.paymentUpi,
                         onTap: () =>
                             setState(() => _paymentMode = AppConstants.paymentUpi),
@@ -252,6 +267,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
                       child: _PaymentModeChip(
                         label: 'Wallet',
                         icon: Icons.account_balance_wallet_rounded,
+                        shortcutKey: '3',
                         isSelected: _paymentMode == AppConstants.paymentWallet,
                         enabled: hasStudent,
                         onTap: hasStudent
@@ -269,6 +285,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
                       child: _PaymentModeChip(
                         label: 'Debt',
                         icon: Icons.receipt_long_rounded,
+                        shortcutKey: '4',
                         isSelected: _paymentMode == AppConstants.paymentDebt,
                         onTap: () =>
                             setState(() => _paymentMode = AppConstants.paymentDebt),
@@ -279,6 +296,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
                       child: _PaymentModeChip(
                         label: 'Mixed',
                         icon: Icons.sync_alt_rounded,
+                        shortcutKey: '5',
                         isSelected: _paymentMode == AppConstants.paymentMixed,
                         onTap: () =>
                             setState(() => _paymentMode = AppConstants.paymentMixed),
@@ -494,7 +512,79 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
           ),
         ),
       ),
+      ),
     );
+  }
+
+  /// Handle keyboard events for the payment dialog:
+  /// 1-5 = select payment method, Enter = confirm
+  KeyEventResult _handleDialogKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    // Don't intercept if a text field is focused
+    final primaryFocus = FocusManager.instance.primaryFocus;
+    if (primaryFocus != null && primaryFocus != _dialogFocusNode) {
+      final ctx = primaryFocus.context;
+      if (ctx != null) {
+        bool inTextField = false;
+        ctx.visitAncestorElements((element) {
+          if (element.widget is EditableText) {
+            inTextField = true;
+            return false;
+          }
+          return true;
+        });
+        if (inTextField) return KeyEventResult.ignored;
+      }
+    }
+
+    final key = event.logicalKey;
+    final multiCart = ref.read(multiCartProvider);
+    final hasStudent = multiCart.activeStudent != null;
+
+    // Number keys 1-5 to select payment method
+    if (key == LogicalKeyboardKey.digit1 ||
+        key == LogicalKeyboardKey.numpad1) {
+      setState(() => _paymentMode = AppConstants.paymentCash);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.digit2 ||
+        key == LogicalKeyboardKey.numpad2) {
+      setState(() => _paymentMode = AppConstants.paymentUpi);
+      return KeyEventResult.handled;
+    }
+    if ((key == LogicalKeyboardKey.digit3 ||
+        key == LogicalKeyboardKey.numpad3) && hasStudent) {
+      setState(() => _paymentMode = AppConstants.paymentWallet);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.digit4 ||
+        key == LogicalKeyboardKey.numpad4) {
+      setState(() => _paymentMode = AppConstants.paymentDebt);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.digit5 ||
+        key == LogicalKeyboardKey.numpad5) {
+      setState(() => _paymentMode = AppConstants.paymentMixed);
+      return KeyEventResult.handled;
+    }
+
+    // Enter to confirm
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      if (!_isProcessing) {
+        _processPayment();
+      }
+      return KeyEventResult.handled;
+    }
+
+    // Escape to close
+    if (key == LogicalKeyboardKey.escape) {
+      Navigator.pop(context);
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
   }
 
   Future<void> _processPayment() async {
@@ -649,6 +739,7 @@ class _PaymentModeChip extends StatefulWidget {
   final IconData icon;
   final bool isSelected;
   final bool enabled;
+  final String? shortcutKey;
   final VoidCallback? onTap;
 
   const _PaymentModeChip({
@@ -656,6 +747,7 @@ class _PaymentModeChip extends StatefulWidget {
     required this.icon,
     required this.isSelected,
     this.enabled = true,
+    this.shortcutKey,
     this.onTap,
   });
 
@@ -670,6 +762,12 @@ class _PaymentModeChipState extends State<_PaymentModeChip> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final pos = context.pos;
+
+    final chipColor = !widget.enabled
+        ? cs.onSurfaceVariant.withValues(alpha: 0.2)
+        : widget.isSelected
+            ? cs.primary
+            : cs.onSurfaceVariant;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -690,31 +788,50 @@ class _PaymentModeChipState extends State<_PaymentModeChip> {
                 ? Border.all(color: cs.primary, width: 1.5)
                 : null,
           ),
-          child: Column(
+          child: Stack(
             children: [
-              Icon(
-                widget.icon,
-                size: 22,
-                color: !widget.enabled
-                    ? cs.onSurfaceVariant.withValues(alpha: 0.2)
-                    : widget.isSelected
-                        ? cs.primary
-                        : cs.onSurfaceVariant,
-              ),
-              const SizedBox(height: 6),
-              Text(
-                widget.label,
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight:
-                      widget.isSelected ? FontWeight.w600 : FontWeight.w500,
-                  color: !widget.enabled
-                      ? cs.onSurfaceVariant.withValues(alpha: 0.2)
-                      : widget.isSelected
-                          ? cs.primary
-                          : cs.onSurfaceVariant,
+              Center(
+                child: Column(
+                  children: [
+                    Icon(
+                      widget.icon,
+                      size: 22,
+                      color: chipColor,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      widget.label,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight:
+                            widget.isSelected ? FontWeight.w600 : FontWeight.w500,
+                        color: chipColor,
+                      ),
+                    ),
+                  ],
                 ),
               ),
+              // Keyboard shortcut hint in top-right corner
+              if (widget.shortcutKey != null)
+                Positioned(
+                  right: 6,
+                  top: -6,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: chipColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      widget.shortcutKey!,
+                      style: GoogleFonts.inter(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: chipColor.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

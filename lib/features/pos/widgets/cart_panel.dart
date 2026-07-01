@@ -96,13 +96,20 @@ class CartPanel extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(10),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        child: Text(
-                          'Clear All',
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: pos.error,
-                          ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Clear All',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: pos.error,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            _KbdHint(label: 'Ctrl+⌫', color: pos.error),
+                          ],
                         ),
                       ),
                     ),
@@ -240,21 +247,13 @@ class CartPanel extends ConsumerWidget {
                   SizedBox(
                     width: double.infinity,
                     height: 56,
-                    child: ElevatedButton.icon(
+                    child: ElevatedButton(
                       onPressed: () {
                         showDialog(
                           context: context,
                           builder: (ctx) => const PaymentDialog(),
                         );
                       },
-                      icon: const Icon(Icons.payment_rounded, size: 22),
-                      label: Text(
-                        'Checkout  •  ${CurrencyFormatter.format(cartTotal)}',
-                        style: GoogleFonts.inter(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: cs.primary,
                         foregroundColor: cs.onPrimary,
@@ -262,6 +261,26 @@ class CartPanel extends ConsumerWidget {
                           borderRadius: BorderRadius.circular(16),
                         ),
                         elevation: 0,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.payment_rounded, size: 22),
+                          const SizedBox(width: 10),
+                          Text(
+                            'Checkout  •  ${CurrencyFormatter.format(cartTotal)}',
+                            style: GoogleFonts.inter(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          _KbdHint(
+                            label: 'F2',
+                            color: cs.onPrimary,
+                            bgOpacity: 0.2,
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -309,6 +328,43 @@ class _SummaryRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Small inline keyboard shortcut hint badge.
+class _KbdHint extends StatelessWidget {
+  final String label;
+  final Color color;
+  final double bgOpacity;
+
+  const _KbdHint({
+    required this.label,
+    required this.color,
+    this.bgOpacity = 0.12,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: bgOpacity),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: color.withValues(alpha: bgOpacity + 0.1),
+          width: 0.5,
+        ),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.inter(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: color.withValues(alpha: 0.8),
+          letterSpacing: 0.3,
+        ),
+      ),
     );
   }
 }
