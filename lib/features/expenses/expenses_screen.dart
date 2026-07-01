@@ -13,6 +13,9 @@ import '../../data/repositories/expense_repository.dart';
 import '../../data/repositories/audit_repository.dart';
 import '../../providers/expense_providers.dart';
 import '../../providers/store_section_provider.dart';
+import '../../providers/supplier_providers.dart';
+import '../../data/models/supplier_model.dart';
+import '../../data/repositories/supplier_repository.dart';
 
 class ExpensesScreen extends ConsumerStatefulWidget {
   const ExpensesScreen({super.key});
@@ -22,10 +25,20 @@ class ExpensesScreen extends ConsumerStatefulWidget {
 }
 
 class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final expensesAsync = ref.watch(expensesStreamProvider);
     final totalExpenses = ref.watch(totalExpensesProvider);
+    final suppliersAsync = ref.watch(suppliersStreamProvider);
+    final suppliers = suppliersAsync.valueOrNull ?? [];
     final cs = Theme.of(context).colorScheme;
     final pos = context.pos;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -53,7 +66,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                 const Spacer(),
                 _buildTotalBadge(pos, totalExpenses),
                 const SizedBox(width: 12),
-                _buildAddButton(context),
+                _buildAddButton(context, suppliers),
               ],
             )
           else
@@ -77,7 +90,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                   children: [
                     Expanded(child: _buildTotalBadge(pos, totalExpenses)),
                     const SizedBox(width: 12),
-                    Expanded(child: _buildAddButton(context)),
+                    Expanded(child: _buildAddButton(context, suppliers)),
                   ],
                 ),
               ],
@@ -266,8 +279,10 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(16),
                     child: Scrollbar(
+                      controller: _scrollController,
                       thumbVisibility: isDesktop,
                       child: SingleChildScrollView(
+                        controller: _scrollController,
                         scrollDirection: Axis.vertical,
                         child: SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
@@ -386,9 +401,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
     );
   }
 
-  Widget _buildAddButton(BuildContext context) {
+  Widget _buildAddButton(BuildContext context, List<Supplier> suppliers) {
     return ElevatedButton.icon(
-      onPressed: () => _showExpenseForm(context),
+      onPressed: () => _showExpenseForm(context, suppliers),
       icon: const Icon(Icons.add_rounded, size: 18),
       label: const Text('Add Expense'),
       style: ElevatedButton.styleFrom(
@@ -431,7 +446,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
 
   /// Simplified form for manual "other" expenses (rent, salary, etc.)
   /// Product expenses are auto-created when items are added/restocked in Inventory.
-  void _showExpenseForm(BuildContext context) {
+  void _showExpenseForm(BuildContext context, List<Supplier> suppliers) {
     final descriptionController = TextEditingController();
     final amountController = TextEditingController();
     final remarkController = TextEditingController();
@@ -441,6 +456,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
         ? StoreSection.store
         : ref.read(storeSectionProvider);
     bool isSaving = false;
+    String? selectedSupplierId;
 
     showDialog(
       context: context,
@@ -497,13 +513,23 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                         labelText: 'Description (e.g. Rent, Salary)'),
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: amountController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                        labelText: 'Amount (₹)', prefixText: '₹ '),
-                  ),
-                  const SizedBox(height: 12),
+                    TextField(
+                      controller: amountController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                          labelText: 'Amount (₹)', prefixText: '₹ '),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String?>(
+                      initialValue: selectedSupplierId,
+                      decoration: const InputDecoration(labelText: 'Supplier (Optional)'),
+                      items: [
+                        const DropdownMenuItem(value: null, child: Text('No Supplier')),
+                        ...suppliers.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))),
+                      ],
+                      onChanged: (val) => setState(() => selectedSupplierId = val),
+                    ),
+                    const SizedBox(height: 12),
                   TextField(
                     controller: remarkController,
                     decoration: const InputDecoration(
@@ -568,6 +594,11 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                           return;
                         }
 
+                        String supplierName = '';
+                        if (selectedSupplierId != null) {
+                          supplierName = suppliers.firstWhere((s) => s.id == selectedSupplierId).name;
+                        }
+
                         final expense = Expense(
                           id: '',
                           productName: description,
@@ -578,8 +609,15 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                           remark: remarkController.text.trim(),
                           date: selectedDate,
                           createdAt: DateTime.now(),
+                          supplierId: selectedSupplierId,
+                          supplierName: supplierName.isNotEmpty ? supplierName : null,
+                          paidAmount: 0,
                         );
                         await ExpenseRepository().addExpense(expense);
+                        
+                        if (selectedSupplierId != null) {
+                          await SupplierRepository().updateSupplierBalance(selectedSupplierId!, amount);
+                        }
                         await AuditRepository().log(
                           action: AppConstants.auditExpense,
                           description:

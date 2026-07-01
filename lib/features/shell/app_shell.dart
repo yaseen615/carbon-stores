@@ -20,6 +20,7 @@ import '../transactions/transactions_screen.dart';
 import '../audit/audit_screen.dart';
 import '../accounts/accounts_screen.dart';
 import '../debts/debts_screen.dart';
+import '../suppliers/suppliers_screen.dart';
 import '../pos/widgets/pos_stats_bar.dart';
 import '../../core/utils/exporter/csv_exporter_stub.dart'
     if (dart.library.html) '../../core/utils/exporter/csv_exporter_web.dart'
@@ -116,6 +117,8 @@ class AppShell extends ConsumerWidget {
         return 'Accounts';
       case AppPage.debts:
         return 'Debts';
+      case AppPage.suppliers:
+        return 'Suppliers';
     }
   }
 
@@ -139,6 +142,8 @@ class AppShell extends ConsumerWidget {
         return const AccountsScreen(key: ValueKey('accounts'));
       case AppPage.debts:
         return const DebtsScreen(key: ValueKey('debts'));
+      case AppPage.suppliers:
+        return const SuppliersScreen(key: ValueKey('suppliers'));
     }
   }
 
@@ -181,6 +186,7 @@ class _PhoneShell extends StatelessWidget {
     (page: AppPage.expenses, icon: Icons.receipt_long_outlined, label: 'Expenses'),
     (page: AppPage.accounts, icon: Icons.account_balance_outlined, label: 'Accounts'),
     (page: AppPage.debts, icon: Icons.money_off_csred_outlined, label: 'Debts'),
+    (page: AppPage.suppliers, icon: Icons.local_shipping_outlined, label: 'Suppliers'),
     (page: AppPage.transactions, icon: Icons.history_rounded, label: 'History'),
     (page: AppPage.auditLog, icon: Icons.fact_check_outlined, label: 'Audit Log'),
   ];
@@ -548,6 +554,12 @@ class _SideNav extends ConsumerWidget {
                   label: 'Debts',
                   isSelected: currentPage == AppPage.debts,
                   onTap: () => onPageSelected(AppPage.debts),
+                ),
+                _NavItem(
+                  icon: Icons.local_shipping_outlined,
+                  label: 'Suppliers',
+                  isSelected: currentPage == AppPage.suppliers,
+                  onTap: () => onPageSelected(AppPage.suppliers),
                 ),
                 _NavItem(
                   icon: Icons.history_rounded,

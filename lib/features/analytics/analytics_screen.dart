@@ -20,15 +20,29 @@ import '../../data/models/product_model.dart';
 import '../../data/models/transaction_model.dart';
 import '../../data/models/expense_model.dart';
 
-class AnalyticsScreen extends ConsumerWidget {
+class AnalyticsScreen extends ConsumerStatefulWidget {
   const AnalyticsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AnalyticsScreen> createState() => _AnalyticsScreenState();
+}
+
+class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final transactionsAsync = ref.watch(filteredTransactionsProvider);
     final totalExpenses = ref.watch(totalFilteredExpensesProvider);
     final totalWallet = ref.watch(totalWalletBalanceProvider);
     final totalDebt = ref.watch(totalOverallDebtProvider);
+    final totalPayables = ref.watch(totalSupplierPayablesProvider);
     final currentFilter = ref.watch(analyticsDateFilterProvider);
     final cs = Theme.of(context).colorScheme;
     final pos = context.pos;
@@ -40,8 +54,10 @@ class AnalyticsScreen extends ConsumerWidget {
     final topPadding = isPhone ? MediaQuery.paddingOf(context).top + 16 : 20.0;
 
     return Scrollbar(
+      controller: _scrollController,
       thumbVisibility: isDesktop,
       child: SingleChildScrollView(
+        controller: _scrollController,
         padding: EdgeInsets.fromLTRB(
             isDesktop ? 24 : 16, topPadding, isDesktop ? 24 : 16, isPhone ? 80 : 24),
       child: Column(
@@ -240,6 +256,14 @@ class AnalyticsScreen extends ConsumerWidget {
                                   'Debt: ${CurrencyFormatter.formatCompact(totalDebt)}',
                               isDark: isDark,
                             ),
+                            _SummaryCard(
+                              title: 'Payables',
+                              value: CurrencyFormatter.format(totalPayables),
+                              icon: Icons.assignment_late_rounded,
+                              color: Colors.orange,
+                              subtitle: 'Supplier dues',
+                              isDark: isDark,
+                            ),
                           ],
                         );
                       }
@@ -289,6 +313,17 @@ class AnalyticsScreen extends ConsumerWidget {
                               color: pos.info,
                               subtitle:
                                   'Debt: ${CurrencyFormatter.formatCompact(totalDebt)}',
+                              isDark: isDark,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: _SummaryCard(
+                              title: 'Payables',
+                              value: CurrencyFormatter.format(totalPayables),
+                              icon: Icons.assignment_late_rounded,
+                              color: Colors.orange,
+                              subtitle: 'Supplier dues',
                               isDark: isDark,
                             ),
                           ),

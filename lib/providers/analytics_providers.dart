@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'student_providers.dart';
 import 'external_debtor_providers.dart';
+import 'supplier_providers.dart';
 
 enum AnalyticsDateFilter {
   today,
@@ -51,4 +52,10 @@ final totalOverallDebtProvider = Provider<double>((ref) {
   final externalDebt = ref.watch(externalDebtorsStreamProvider).valueOrNull
       ?.fold<double>(0, (sum, e) => sum + e.debt) ?? 0;
   return studentDebt + externalDebt;
+});
+
+// ─── Total Supplier Payables Helper ───
+final totalSupplierPayablesProvider = Provider<double>((ref) {
+  final suppliers = ref.watch(suppliersStreamProvider).valueOrNull ?? [];
+  return suppliers.fold<double>(0, (sum, s) => sum + s.balance);
 });

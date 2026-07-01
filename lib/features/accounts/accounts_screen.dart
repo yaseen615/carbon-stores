@@ -12,11 +12,24 @@ import '../../../core/utils/exporter/csv_exporter_stub.dart'
 import 'package:intl/intl.dart';
 import '../../../core/utils/responsive_helper.dart';
 
-class AccountsScreen extends ConsumerWidget {
+class AccountsScreen extends ConsumerStatefulWidget {
   const AccountsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AccountsScreen> createState() => _AccountsScreenState();
+}
+
+class _AccountsScreenState extends ConsumerState<AccountsScreen> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final pos = context.pos;
 
@@ -38,8 +51,10 @@ class AccountsScreen extends ConsumerWidget {
         ],
       ),
       body: Scrollbar(
+        controller: _scrollController,
         thumbVisibility: Responsive.isTabletOrDesktop(context),
         child: CustomScrollView(
+          controller: _scrollController,
           slivers: [
             SliverToBoxAdapter(
               child: Column(

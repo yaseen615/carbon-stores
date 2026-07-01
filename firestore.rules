@@ -57,6 +57,19 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
+    // ─── Suppliers ───
+    // Admin needs full CRUD for supplier management and balance tracking.
+    match /suppliers/{supplierId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // ─── Supplier Payments ───
+    // Financial records — create and read freely. Deletes are forbidden.
+    match /supplier_payments/{paymentId} {
+      allow read, create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
     // ─── Default: deny everything else ───
     // Any collection not explicitly listed above is fully locked down.
     // This prevents accidental exposure of future collections.

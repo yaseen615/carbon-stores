@@ -19,19 +19,37 @@ import '../../data/repositories/expense_repository.dart';
 import '../../data/models/expense_model.dart';
 import '../../providers/product_providers.dart';
 import '../../providers/store_section_provider.dart';
+import '../../providers/supplier_providers.dart';
+import '../../data/models/supplier_model.dart';
+import '../../data/repositories/supplier_repository.dart';
 import '../../core/services/local_storage_service.dart';
 import '../../core/utils/csv_exporter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
-class InventoryScreen extends ConsumerWidget {
+class InventoryScreen extends ConsumerStatefulWidget {
   const InventoryScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<InventoryScreen> createState() => _InventoryScreenState();
+}
+
+class _InventoryScreenState extends ConsumerState<InventoryScreen> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final productsAsync = ref.watch(productsStreamProvider);
     final filtered = ref.watch(filteredProductsProvider);
     final categories = ref.watch(categoriesProvider);
+    final suppliersAsync = ref.watch(suppliersStreamProvider);
+    final suppliers = suppliersAsync.valueOrNull ?? [];
     final lowStockProducts = ref.watch(lowStockProductsProvider);
     final cs = Theme.of(context).colorScheme;
     final pos = context.pos;
@@ -59,7 +77,7 @@ class InventoryScreen extends ConsumerWidget {
                 const Spacer(),
                 if (lowStockProducts.isNotEmpty)
                   InkWell(
-                    onTap: () => _showLowStockDetails(context, lowStockProducts),
+                    onTap: () => _showLowStockDetails(context, ref, lowStockProducts),
                     borderRadius: BorderRadius.circular(12),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -83,7 +101,7 @@ class InventoryScreen extends ConsumerWidget {
                   ),
                 const SizedBox(width: 12),
                 ElevatedButton.icon(
-                  onPressed: () => _showProductForm(context, ref),
+                  onPressed: () => _showProductForm(context, ref, suppliers),
                   icon: const Icon(Icons.add_rounded, size: 18),
                   label: const Text('Add Product'),
                   style: ElevatedButton.styleFrom(
@@ -109,7 +127,7 @@ class InventoryScreen extends ConsumerWidget {
                     const SectionToggle(compact: true),
                     if (lowStockProducts.isNotEmpty)
                       InkWell(
-                        onTap: () => _showLowStockDetails(context, lowStockProducts),
+                        onTap: () => _showLowStockDetails(context, ref, lowStockProducts),
                         borderRadius: BorderRadius.circular(10),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -133,7 +151,7 @@ class InventoryScreen extends ConsumerWidget {
                       ),
                     const SizedBox(width: 8),
                     ElevatedButton.icon(
-                      onPressed: () => _showProductForm(context, ref),
+                      onPressed: () => _showProductForm(context, ref, suppliers),
                       icon: const Icon(Icons.add_rounded, size: 16),
                       label: const Text('Add'),
                       style: ElevatedButton.styleFrom(
@@ -234,8 +252,8 @@ class InventoryScreen extends ConsumerWidget {
                         product: product,
                         pos: pos,
                         isDark: isDark,
-                        onEdit: () => _showProductForm(context, ref, product: product),
-                        onStockIn: () => _showStockInDialog(context, product),
+                        onEdit: () => _showProductForm(context, ref, suppliers, product: product),
+                        onStockIn: () => _showStockInDialog(context, product, suppliers),
                         onDelete: () => _confirmDelete(context, product),
                       );
                     },
@@ -262,8 +280,10 @@ class InventoryScreen extends ConsumerWidget {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(16),
                     child: Scrollbar(
+                      controller: _scrollController,
                       thumbVisibility: isDesktop,
                       child: SingleChildScrollView(
+                        controller: _scrollController,
                         scrollDirection: Axis.vertical,
                         child: SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
@@ -392,13 +412,13 @@ class InventoryScreen extends ConsumerWidget {
                                         color: pos.success),
                                     tooltip: 'Add Stock',
                                     onPressed: () =>
-                                        _showStockInDialog(context, product),
+                                        _showStockInDialog(context, product, suppliers),
                                   ),
                                   IconButton(
                                     icon: Icon(Icons.edit_rounded,
                                         size: 16, color: cs.primary),
                                     tooltip: 'Edit',
-                                    onPressed: () => _showProductForm(context, ref,
+                                    onPressed: () => _showProductForm(context, ref, suppliers,
                                         product: product),
                                   ),
                                   IconButton(
@@ -457,7 +477,7 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 
-  void _showProductForm(BuildContext context, WidgetRef ref, {Product? product}) {
+  void _showProductForm(BuildContext context, WidgetRef ref, List<Supplier> suppliers, {Product? product}) {
     final isEdit = product != null;
     final nameController = TextEditingController(text: product?.name ?? '');
     final priceController =
@@ -468,8 +488,13 @@ class InventoryScreen extends ConsumerWidget {
         TextEditingController(text: product?.stock.toString() ?? '0');
     final categoryController =
         TextEditingController(text: product?.category ?? '');
-    final supplierController =
-        TextEditingController(text: product?.supplier ?? '');
+    
+    // We will find supplier ID from name for backwards compatibility, or default to null
+    String? selectedSupplierId;
+    if (product != null && product.supplier.isNotEmpty) {
+      final s = suppliers.where((element) => element.name == product.supplier).firstOrNull;
+      if (s != null) selectedSupplierId = s.id;
+    }
     final cs = Theme.of(context).colorScheme;
     final pos = context.pos;
     XFile? pickedImage;
@@ -666,12 +691,15 @@ class InventoryScreen extends ConsumerWidget {
                         decoration:
                             const InputDecoration(labelText: 'Product Name')),
                     const SizedBox(height: 12),
-                    TextField(
-                        controller: supplierController,
-                        decoration: const InputDecoration(
-                          labelText: 'Supplier',
-                          hintText: 'e.g. ABC Distributors',
-                        )),
+                    DropdownButtonFormField<String?>(
+                      initialValue: selectedSupplierId,
+                      decoration: const InputDecoration(labelText: 'Supplier (Optional)'),
+                      items: [
+                        const DropdownMenuItem(value: null, child: Text('No Supplier')),
+                        ...suppliers.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))),
+                      ],
+                      onChanged: (val) => setState(() => selectedSupplierId = val),
+                    ),
                     const SizedBox(height: 12),
                     Row(
                       children: [
@@ -763,7 +791,12 @@ class InventoryScreen extends ConsumerWidget {
                           final stock =
                               int.tryParse(stockController.text) ?? 0;
                           final category = categoryController.text.trim();
-                          final supplier = supplierController.text.trim();
+                          
+                          String supplierName = '';
+                          if (selectedSupplierId != null) {
+                            supplierName = suppliers.firstWhere((s) => s.id == selectedSupplierId).name;
+                          }
+
                           if (name.isEmpty || price <= 0 || category.isEmpty) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
@@ -794,7 +827,7 @@ class InventoryScreen extends ConsumerWidget {
                               'stock': stock,
                               'category': category,
                               'section': selectedSection.firestoreValue,
-                              'supplier': supplier,
+                              'supplier': supplierName,
                               'imageId': imageId,
                             });
                             
@@ -808,11 +841,19 @@ class InventoryScreen extends ConsumerWidget {
                                 cost: wholesalePrice,
                                 section: selectedSection.firestoreValue,
                                 type: 'product',
-                                remark: supplier.isNotEmpty ? 'Supplier: $supplier (Restock)' : 'Manual Stock Update',
+                                remark: supplierName.isNotEmpty ? 'Supplier: $supplierName (Restock)' : 'Manual Stock Update',
                                 date: selectedDate,
                                 createdAt: DateTime.now(),
+                                supplierId: selectedSupplierId,
+                                supplierName: supplierName.isNotEmpty ? supplierName : null,
+                                paidAmount: 0, // Unpaid by default
                               );
                               await ExpenseRepository().addExpense(expense);
+                              
+                              if (selectedSupplierId != null) {
+                                final totalCost = stockDifference * wholesalePrice;
+                                await SupplierRepository().updateSupplierBalance(selectedSupplierId!, totalCost);
+                              }
                             }
                           } else {
                             final newProduct = Product(
@@ -823,7 +864,7 @@ class InventoryScreen extends ConsumerWidget {
                               stock: stock,
                               category: category,
                               section: selectedSection.firestoreValue,
-                              supplier: supplier,
+                              supplier: supplierName,
                               updatedAt: DateTime.now(),
                               imageId: imageId,
                             );
@@ -839,11 +880,19 @@ class InventoryScreen extends ConsumerWidget {
                                 cost: wholesalePrice,
                                 section: selectedSection.firestoreValue,
                                 type: 'product',
-                                remark: supplier.isNotEmpty ? 'Supplier: $supplier' : '',
+                                remark: supplierName.isNotEmpty ? 'Supplier: $supplierName' : '',
                                 date: selectedDate,
                                 createdAt: DateTime.now(),
+                                supplierId: selectedSupplierId,
+                                supplierName: supplierName.isNotEmpty ? supplierName : null,
+                                paidAmount: 0,
                               );
                               await ExpenseRepository().addExpense(expense);
+
+                              if (selectedSupplierId != null) {
+                                final totalCost = stock * wholesalePrice;
+                                await SupplierRepository().updateSupplierBalance(selectedSupplierId!, totalCost);
+                              }
                             }
                           }
 
@@ -884,13 +933,20 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 
-  void _showStockInDialog(BuildContext context, Product product) {
+  void _showStockInDialog(BuildContext context, Product product, List<Supplier> suppliers) {
     final qtyController = TextEditingController();
     final wholesalePriceController = TextEditingController(text: product.wholesalePrice > 0 ? product.wholesalePrice.toString() : '');
     final pos = context.pos;
     final cs = Theme.of(context).colorScheme;
     DateTime selectedDate = DateTime.now();
     bool isSaving = false;
+    
+    // We will find supplier ID from name for backwards compatibility, or default to null
+    String? selectedSupplierId;
+    if (product.supplier.isNotEmpty) {
+      final s = suppliers.where((element) => element.name == product.supplier).firstOrNull;
+      if (s != null) selectedSupplierId = s.id;
+    }
 
     showDialog(
       context: context,
@@ -929,6 +985,16 @@ class InventoryScreen extends ConsumerWidget {
                   controller: wholesalePriceController,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(labelText: 'Wholesale Price (₹)'),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String?>(
+                  initialValue: selectedSupplierId,
+                  decoration: const InputDecoration(labelText: 'Supplier (Optional)'),
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('No Supplier')),
+                    ...suppliers.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))),
+                  ],
+                  onChanged: (val) => setState(() => selectedSupplierId = val),
                 ),
                 const SizedBox(height: 16),
                 InkWell(
@@ -973,6 +1039,11 @@ class InventoryScreen extends ConsumerWidget {
 
                       // Auto-create expense for restocked items
                       if (wholesalePrice > 0) {
+                        String supplierName = '';
+                        if (selectedSupplierId != null) {
+                          supplierName = suppliers.firstWhere((s) => s.id == selectedSupplierId).name;
+                        }
+
                         final expense = Expense(
                           id: '',
                           productName: product.name,
@@ -981,11 +1052,19 @@ class InventoryScreen extends ConsumerWidget {
                           cost: wholesalePrice,
                           section: product.section,
                           type: 'product',
-                          remark: 'Restock',
+                          remark: supplierName.isNotEmpty ? 'Supplier: $supplierName' : 'Restock',
                           date: selectedDate,
                           createdAt: DateTime.now(),
+                          supplierId: selectedSupplierId,
+                          supplierName: supplierName.isNotEmpty ? supplierName : null,
+                          paidAmount: 0,
                         );
                         await ExpenseRepository().addExpense(expense);
+                        
+                        if (selectedSupplierId != null) {
+                          final totalCost = qty * wholesalePrice;
+                          await SupplierRepository().updateSupplierBalance(selectedSupplierId!, totalCost);
+                        }
                       }
 
                       await AuditRepository().log(
@@ -1079,7 +1158,7 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 
-  void _showLowStockDetails(BuildContext context, List<Product> lowStockProducts) {
+  void _showLowStockDetails(BuildContext context, WidgetRef ref, List<Product> lowStockProducts) {
     final cs = Theme.of(context).colorScheme;
     final pos = context.pos;
     bool isExporting = false;
@@ -1196,7 +1275,10 @@ class InventoryScreen extends ConsumerWidget {
                               tooltip: 'Restock',
                               onPressed: () {
                                 Navigator.pop(ctx);
-                                _showStockInDialog(context, product);
+                                // Can't pass suppliers easily here since it's inside another dialog,
+                                // but we can just use the provider manually or re-fetch.
+                                // For simplicity, we just pass the empty list and let user select
+                                _showStockInDialog(context, product, ref.read(suppliersStreamProvider).valueOrNull ?? []);
                               },
                             ),
                           ],

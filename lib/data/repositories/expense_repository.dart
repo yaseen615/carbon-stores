@@ -27,6 +27,15 @@ class ExpenseRepository {
         .map((snapshot) => snapshot.docs.map(Expense.fromFirestore).toList());
   }
 
+  /// Stream expenses for a specific supplier
+  Stream<List<Expense>> getExpensesBySupplier(String supplierId) {
+    return _collection
+        .where('supplier_id', isEqualTo: supplierId)
+        .orderBy('date', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map(Expense.fromFirestore).toList());
+  }
+
   /// Add an expense
   Future<String> addExpense(Expense expense) async {
     final doc = await _collection.add(expense.toFirestore());

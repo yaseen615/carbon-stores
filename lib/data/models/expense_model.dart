@@ -9,6 +9,9 @@ class Expense {
   final String section; // 'cafe' or 'store'
   final String type; // 'product' (auto from inventory) or 'other' (manual)
   final String remark; // Optional note/remark
+  final String? supplierId;
+  final String? supplierName;
+  final double paidAmount;
   final DateTime date;
   final DateTime createdAt;
 
@@ -21,6 +24,9 @@ class Expense {
     this.section = 'store',
     this.type = 'other',
     this.remark = '',
+    this.supplierId,
+    this.supplierName,
+    this.paidAmount = 0.0,
     required this.date,
     required this.createdAt,
   });
@@ -28,6 +34,8 @@ class Expense {
   double get totalCost => cost * quantity;
 
   bool get isProductExpense => type == 'product';
+  
+  bool get isPaid => paidAmount >= totalCost;
 
   Expense copyWith({
     String? id,
@@ -38,6 +46,9 @@ class Expense {
     String? section,
     String? type,
     String? remark,
+    String? supplierId,
+    String? supplierName,
+    double? paidAmount,
     DateTime? date,
     DateTime? createdAt,
   }) {
@@ -50,6 +61,9 @@ class Expense {
       section: section ?? this.section,
       type: type ?? this.type,
       remark: remark ?? this.remark,
+      supplierId: supplierId ?? this.supplierId,
+      supplierName: supplierName ?? this.supplierName,
+      paidAmount: paidAmount ?? this.paidAmount,
       date: date ?? this.date,
       createdAt: createdAt ?? this.createdAt,
     );
@@ -66,6 +80,9 @@ class Expense {
       section: data['section'] ?? 'store',
       type: data['type'] ?? 'other',
       remark: data['remark'] ?? '',
+      supplierId: data['supplier_id'],
+      supplierName: data['supplier_name'],
+      paidAmount: (data['paid_amount'] ?? 0).toDouble(),
       date: (data['date'] as Timestamp?)?.toDate() ?? DateTime.now(),
       createdAt: (data['created_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
@@ -80,6 +97,9 @@ class Expense {
       'section': section,
       'type': type,
       'remark': remark,
+      'supplier_id': supplierId,
+      'supplier_name': supplierName,
+      'paid_amount': paidAmount,
       'date': Timestamp.fromDate(date),
       'created_at': FieldValue.serverTimestamp(),
     };

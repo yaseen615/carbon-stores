@@ -13,6 +13,8 @@ class AppConstants {
   static const String expensesCollection = 'expenses';
   static const String auditLogsCollection = 'audit_logs';
   static const String externalDebtorsCollection = 'external_debtors';
+  static const String suppliersCollection = 'suppliers';
+  static const String supplierPaymentsCollection = 'supplier_payments';
 
   // ─── Payment Modes ───
   static const String paymentCash = 'cash';
