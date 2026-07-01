@@ -261,9 +261,13 @@ class InventoryScreen extends ConsumerWidget {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(16),
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: DataTable(
+                    child: Scrollbar(
+                      thumbVisibility: isDesktop,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.vertical,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: DataTable(
                         headingRowColor: WidgetStateProperty.all(
                           isDark
                               ? Colors.white.withValues(alpha: 0.04)
@@ -411,6 +415,8 @@ class InventoryScreen extends ConsumerWidget {
                         }).toList(),
                       ),
                     ),
+                  ),
+                  ),
                   ),
                 );
               },
